@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="ESP32-S3 项目的网页发布测试页，检查页面加载和按钮交互。">
+  <title>S3 Lab · 网页发布测试</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%23132722'/%3E%3Crect x='10' y='10' width='20' height='20' rx='4' fill='%2386efac'/%3E%3C/svg%3E">
+  <style>
+    :root { color-scheme: dark; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; background: #0d1714; color: #e9f3ee; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100dvh; padding: 28px; display: grid; place-items: center; background: radial-gradient(ellipse at 70% 20%, #1d3c2e 0, transparent 55%), #0d1714; }
+    main { width: min(100%, 820px); }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 650; letter-spacing: 1px; }
+    .logo { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; background: #a4e8bb; color: #163c26; font: 700 15px monospace; }
+    .badge { font-size: 13px; color: #b2c4b9; border: 1px solid #354b3e; padding: 7px 11px; border-radius: 20px; }
+    .card { border: 1px solid #33483d; border-radius: 20px; background: #15251edb; overflow: hidden; box-shadow: 0 28px 90px #0003; }
+    .content { display: grid; grid-template-columns: 1.2fr 1fr; gap: 32px; padding: 42px; align-items: center; }
+    .eyebrow { color: #8de5ab; font: 13px monospace; letter-spacing: 2px; }
+    h1 { font-size: clamp(27px, 4vw, 36px); letter-spacing: -1px; margin: 16px 0; line-height: 1.35; }
+    p { color: #a6bcb0; font-size: 16px; line-height: 1.85; margin: 0 0 23px; }
+    button { font: 600 15px inherit; font-family: inherit; font-size: 15px; font-weight: 600; background: #a4e8bb; color: #173d25; border: 0; border-radius: 9px; min-height: 46px; padding: 11px 20px; cursor: pointer; }
+    button:hover { background: #bbf2cd; }
+    button:focus-visible { outline: 3px solid #f4fff8; outline-offset: 4px; }
+    .note { font-size: 13px; color: #80998a; line-height: 1.75; margin: 17px 0 0; }
+    .demo { padding: 28px; background: #0d1a14; border: 1px solid #2f4839; border-radius: 14px; text-align: center; }
+    .demo-title { color: #afc6b7; font: 13px monospace; text-align: left; }
+    .led-ring { width: 105px; height: 105px; margin: 31px auto 24px; border: 1px solid #35483c; border-radius: 50%; display: grid; place-items: center; }
+    .led { width: 47px; height: 47px; border: 3px solid #4d6556; border-radius: 50%; background: #2c4032; transition: background .15s, box-shadow .15s; }
+    .led.on { background: #a4e8bb; border-color: #cffcdc; box-shadow: 0 0 20px #94eab999, 0 0 50px #94eab94a; }
+    #led-label { color: #c1d7c9; font: 14px monospace; }
+    #clicks { margin-top: 10px; color: #6f8a79; font-size: 12px; }
+    .checks { display: flex; flex-wrap: wrap; gap: 13px 26px; padding: 18px 42px; border-top: 1px solid #304438; color: #9fb7a8; font-size: 13px; background: #112018; }
+    .checks strong { color: #a4e8bb; font-weight: 500; margin-right: 6px; }
+    footer { margin-top: 18px; color: #6e8a78; font-size: 12px; text-align: center; line-height: 1.8; overflow-wrap: anywhere; }
+    @media (max-width: 640px) { body { padding: 20px; } .content { grid-template-columns: 1fr; padding: 27px; gap: 26px; } .checks { padding: 17px 27px; } h1 { letter-spacing: 0; } header { flex-wrap: wrap; } .demo { padding: 23px; } }
+    @media (prefers-reduced-motion: reduce) { .led { transition: none; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header><div class="brand"><span class="logo">S3</span>S3 LAB</div><span class="badge">网页发布测试 · v0.1</span></header>
+    <section class="card" aria-labelledby="title">
+      <div class="content">
+        <div>
+          <div class="eyebrow">HELLO, WEB.</div>
+          <h1 id="title">你好，ESP32-S3。</h1>
+          <p>这是第一个网页测试。点击按钮，检查浏览器里的 LED 开关交互。</p>
+          <button id="toggle" type="button" aria-pressed="false" aria-controls="led">点亮 LED</button>
+          <p class="note">当前仅测试网页和 JavaScript。<br>ESP32-S3 芯片仿真尚未接入。</p>
+        </div>
+        <div class="demo" aria-label="LED 交互测试">
+          <div class="demo-title">LED / BROWSER DEMO</div>
+          <div class="led-ring"><div class="led" id="led" aria-hidden="true"></div></div>
+          <div id="led-label" role="status" aria-live="polite">LED · OFF</div>
+          <div id="clicks">已切换 0 次</div>
+        </div>
+      </div>
+      <div class="checks"><span><strong>✓</strong>页面已加载</span><span id="js-status">JavaScript 检查中…</span><span id="protocol">连接检查中…</span></div>
+    </section>
+    <footer id="address">S3 Lab · 简单测试页面</footer>
+    <noscript><p>当前浏览器未启用 JavaScript，LED 按钮无法使用。</p></noscript>
+  </main>
+  <script>
+    'use strict';
+    const toggle = document.getElementById('toggle');
+    const led = document.getElementById('led');
+    const label = document.getElementById('led-label');
+    let on = false;
+    let clicks = 0;
+    toggle.addEventListener('click', () => {
+      on = !on;
+      clicks += 1;
+      led.classList.toggle('on', on);
+      toggle.setAttribute('aria-pressed', String(on));
+      toggle.textContent = on ? '熄灭 LED' : '点亮 LED';
+      label.textContent = on ? 'LED · ON' : 'LED · OFF';
+      document.getElementById('clicks').textContent = `已切换 ${clicks} 次`;
+    });
+    document.getElementById('js-status').textContent = '✓ JavaScript 正常';
+    document.getElementById('protocol').textContent = location.protocol === 'https:' ? '✓ HTTPS 连接' : location.protocol === 'file:' ? '本地文件预览' : '本地 HTTP 预览';
+    document.getElementById('address').textContent = location.protocol === 'file:' ? 'S3 Lab · 本地预览，尚未发布' : `${location.origin}${location.pathname}`;
+  </script>
+</body>
+</html>
