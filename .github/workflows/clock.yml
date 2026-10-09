@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -75,7 +75,19 @@ jobs:
         run: |
           arduino-cli compile --fqbn 'esp32:esp32:esp32s3:FlashMode=dio,FlashSize=4M,PSRAM=disabled,CDCOnBoot=default' --build-path .build/output --jobs 2 .build/clock
           cp .build/output/clock.ino.merged.bin dist/firmware/clock.bin
+          cp .build/output/clock.ino.elf dist/firmware/clock.elf
           cp .build/clock/clock.ino dist/firmware/clock.ino
+      - name: Save compiled firmware for reproducible debugging
+        run: |
+          mkdir -p firmware
+          cp dist/firmware/clock.{bin,elf,ino} firmware/
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add firmware/clock.bin firmware/clock.elf firmware/clock.ino
+          if ! git diff --cached --quiet; then
+            git commit -m 'Update compiled ESP32-S3 clock firmware'
+            git push origin HEAD:main
+          fi
       - name: Fetch verified Espressif WASM release
         run: |
           curl --fail --location --retry 3 --output .build/esp-emu.tar.gz https://github.com/espressif/esp-emulator/releases/download/v0.48.0/esp-emu-0.48.0-wasm.tar.gz
@@ -100,6 +112,8 @@ jobs:
           emu.load_default_rom();
           emu.set_boot_from_rom(true);
           emu.load_firmware(fs.readFileSync('dist/firmware/clock.bin'));
+          emu.load_app_elf(fs.readFileSync('dist/firmware/clock.elf'));
+          emu.set_wifi_auth('Wokwi-GUEST','','open','both');
           if (!emu.is_xtensa()) throw Error('CPU target mismatch');
           console.log('Initial CPU state:',JSON.stringify({xtensa:emu.is_xtensa(),cores:emu.num_harts(),pc:emu.pc()}));
           const net = new VirtualNetwork();
