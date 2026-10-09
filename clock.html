@@ -102,12 +102,12 @@ const u16 = (b, n) => (b[n] << 8) | b[n + 1];
 const put16 = (b, n, v) => { b[n] = v >>> 8; b[n + 1] = v; };
 const put32 = (b, n, v) => { new DataView(b.buffer, b.byteOffset, b.byteLength).setUint32(n, v >>> 0); };
 
-function udpReply(frame, data) {
+function udpReply(frame, data, addresses = null) {
   const start = 14, ihl = (frame[start] & 15) * 4, udp = start + ihl;
   const b = new Uint8Array(42 + data.length);
   b.set(frame.subarray(6, 12), 0); b.set(MAC, 6); put16(b, 12, 0x0800);
   b[14] = 0x45; put16(b, 16, 28 + data.length); b[22] = 64; b[23] = 17;
-  b.set(frame.subarray(30, 34), 26); b.set(frame.subarray(26, 30), 30);
+  b.set(addresses?.source || frame.subarray(30, 34), 26); b.set(addresses?.destination || frame.subarray(26, 30), 30);
   put16(b, 24, checksum(b.subarray(14, 34)));
   put16(b, 34, u16(frame, udp + 2)); put16(b, 36, u16(frame, udp));
   put16(b, 38, 8 + data.length); b.set(data, 42);
@@ -116,13 +116,15 @@ function udpReply(frame, data) {
 }
 
 class VirtualNetwork {
-  constructor(now = () => Date.now()) { this.now = now; this.ntpReplies = 0; this.dnsReplies = 0; this.frames = 0; }
+  constructor(now = () => Date.now()) { this.now = now; this.ntpReplies = 0; this.dnsReplies = 0; this.dhcpReplies = 0; this.frames = 0; }
   reply(frame) {
     this.frames++;
     if (frame.length < 42) return null;
     const type = u16(frame, 12);
     if (type === 0x0806 && frame.length >= 42 && u16(frame, 20) === 1) {
-      // Resolve any queried IPv4 address to this virtual gateway.
+      // Answer only for the gateway; answering the guest's DHCP address probe
+      // would falsely claim its IP and make lwIP decline the lease.
+      if (!frame.subarray(38,42).every((byte,i) => byte === IP[i])) return null;
       const b = frame.slice(0, 42); b.set(frame.subarray(6, 12), 0); b.set(MAC, 6);
       put16(b, 20, 2); b.set(MAC, 22); b.set(frame.subarray(38, 42), 28);
       b.set(frame.subarray(22, 28), 32); b.set(frame.subarray(28, 32), 38); return b;
@@ -134,6 +136,24 @@ class VirtualNetwork {
     const length = u16(frame, udp + 4);
     if (length < 8 || udp + length > frame.length) return null;
     const data = frame.subarray(udp + 8, udp + length), port = u16(frame, udp + 2);
+    if (port === 67 && u16(frame, udp) === 68 && data.length >= 240 && data[0] === 1 && data[1] === 1 && data[2] === 6 && u16(data,236) === 0x6382 && u16(data,238) === 0x5363) {
+      let type = 0, i = 240;
+      while (i < data.length && data[i] !== 255) {
+        const code = data[i++]; if (code === 0) continue;
+        if (i >= data.length) break;
+        const size = data[i++]; if (i + size > data.length) return null;
+        if (code === 53 && size === 1) type = data[i];
+        i += size;
+      }
+      if (type !== 1 && type !== 3 && type !== 8) return null;
+      const options = new Uint8Array([53,1,type === 1 ? 2 : 5,54,4,...IP,51,4,0,0,14,16,1,4,255,255,255,0,3,4,...IP,6,4,...IP,255]);
+      const bootp = new Uint8Array(240 + options.length);
+      bootp[0] = 2; bootp[1] = 1; bootp[2] = 6;
+      bootp.set(data.subarray(4,12),4); bootp.set([192,168,4,2],16); bootp.set(IP,20);
+      bootp.set(data.subarray(28,44),28); bootp.set([99,130,83,99],236); bootp.set(options,240);
+      this.dhcpReplies++;
+      return udpReply(frame,bootp,{source:IP,destination:new Uint8Array([255,255,255,255])});
+    }
     if (port === 123 && data.length >= 48) {
       const ntp = new Uint8Array(48); ntp[0] = 0x24; ntp[1] = 1; ntp[2] = 6; ntp[3] = 0xec;
       ntp.set([76, 79, 67, 76], 12); ntp.set(data.subarray(40, 48), 24);
