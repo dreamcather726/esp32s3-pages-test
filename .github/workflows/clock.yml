@@ -106,19 +106,20 @@ jobs:
           if (!emu.is_xtensa()) throw Error('CPU target mismatch');
           console.log('Initial CPU state:',JSON.stringify({xtensa:emu.is_xtensa(),cores:emu.num_harts(),pc:emu.pc()}));
           const net = new VirtualNetwork();
+          const clockPattern = /时间:\s*(\d\d):(\d\d):(\d\d) \| 舵机角度 - 时: (\d+)°, 分: (\d+)°, 秒: (\d+)°/g;
           let uart = '', servo = [], started = performance.now(), lastSample = 0;
           while (performance.now()-started < 90000) {
             const text = emu.run_batch(50000);
             if (text) { process.stdout.write(text); uart += text; }
             net.pump(emu);
             if (performance.now()-lastSample>100) { servo = readServoSignals(emu); lastSample = performance.now(); }
-            if ((uart.match(/TIME \d\d:\d\d:\d\d/g)||[]).length >= 2 && net.ntpReplies && servo.every(s=>s.active)) break;
+            if ([...uart.matchAll(clockPattern)].length >= 2 && net.ntpReplies && servo.every(s=>s.active)) break;
             if (emu.needs_restart()) throw Error('Firmware unexpectedly requested restart');
             const drift=emu.throttle_delay_ms(performance.now());
             if (drift>0) await sleep(Math.min(10,drift));
           }
           servo = readServoSignals(emu);
-          const times = [...uart.matchAll(/TIME (\d\d):(\d\d):(\d\d) \| SERVO (\d+) (\d+) (\d+)/g)];
+          const times = [...uart.matchAll(clockPattern)];
           if (times.length<2 || !net.ntpReplies || !servo.every(s=>s.active)) throw Error('Missing real NTP synchronization or PWM output: '+JSON.stringify({ntp:net.ntpReplies,dns:net.dnsReplies,servo}));
           const last=times.at(-1);
           const guest=Number(last[1])*3600+Number(last[2])*60+Number(last[3]);
