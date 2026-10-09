@@ -1,0 +1,129 @@
+name: Build real ESP32-S3 clock and publish
+
+on:
+  push:
+    branches: [main]
+    paths: [clock.html, .github/workflows/clock.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+        with:
+          version: '1.5.1'
+      - name: Install pinned ESP32 toolchain and libraries
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@3.2.0
+          arduino-cli lib install NTPClient@3.2.1 ESP32Servo@3.0.5
+      - name: Extract firmware and device models from clock.html
+        run: |
+          mkdir -p .build/clock dist/firmware dist/vendor/esp-emu/pkg
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class Extract(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=False)
+                  self.key = None
+                  self.values = {}
+              def handle_starttag(self, tag, attrs):
+                  if tag == 'script':
+                      self.key = dict(attrs).get('id')
+              def handle_data(self, data):
+                  if self.key:
+                      self.values[self.key] = self.values.get(self.key, '') + data
+              def handle_endtag(self, tag):
+                  if tag == 'script': self.key = None
+          parser = Extract()
+          parser.feed(Path('clock.html').read_text())
+          Path('.build/clock/clock.ino').write_text(parser.values['source-code'])
+          helpers = parser.values['worker-code'].split('let init, WasmEmulator;')[0]
+          Path('dist/device-models.mjs').write_text(helpers + '\nexport { VirtualNetwork, readServoSignals };\n')
+          PY
+      - name: Compile genuine Xtensa firmware
+        run: |
+          arduino-cli compile --fqbn 'esp32:esp32:esp32s3:FlashMode=dio,FlashSize=4M,PSRAM=disabled,CDCOnBoot=default' --build-path .build/output --jobs 2 .build/clock
+          cp .build/output/clock.ino.merged.bin dist/firmware/clock.bin
+          cp .build/clock/clock.ino dist/firmware/clock.ino
+      - name: Fetch verified Espressif WASM release
+        run: |
+          curl --fail --location --retry 3 --output .build/esp-emu.tar.gz https://github.com/espressif/esp-emulator/releases/download/v0.48.0/esp-emu-0.48.0-wasm.tar.gz
+          echo '01faf50e66d740c1e5804c48a9ac13475a0a4fbeb23b3f398108bb6281a124ab  .build/esp-emu.tar.gz' | sha256sum --check
+          tar -xzf .build/esp-emu.tar.gz -C .build
+          cp .build/esp-emu-0.48.0-wasm/www/pkg/{esp_emu.js,esp_emu_bg.wasm,package.json,LICENSE} dist/vendor/esp-emu/pkg/
+      - name: Verify actual firmware, NTP and PWM before publication
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import { setTimeout as sleep } from 'node:timers/promises';
+          import { initSync, WasmEmulator } from './dist/vendor/esp-emu/pkg/esp_emu.js';
+          import { VirtualNetwork, readServoSignals } from './dist/device-models.mjs';
+          initSync({module:fs.readFileSync('dist/vendor/esp-emu/pkg/esp_emu_bg.wasm')});
+          const emu = new WasmEmulator('esp32s3');
+          emu.set_wifi_config('Wokwi-GUEST','');
+          emu.load_default_rom();
+          emu.set_boot_from_rom(true);
+          emu.load_firmware(fs.readFileSync('dist/firmware/clock.bin'));
+          if (!emu.is_xtensa() || emu.num_harts() !== 2) throw Error('CPU target mismatch');
+          const net = new VirtualNetwork();
+          let uart = '', servo = [], started = performance.now();
+          while (performance.now()-started < 90000) {
+            const text = emu.run_batch(50000);
+            if (text) { process.stdout.write(text); uart += text; }
+            net.pump(emu);
+            servo = readServoSignals(emu);
+            if ((uart.match(/TIME \d\d:\d\d:\d\d/g)||[]).length >= 2 && net.ntpReplies && servo.every(s=>s.active)) break;
+            if (emu.needs_restart()) throw Error('Firmware unexpectedly requested restart');
+            await sleep(Math.max(0,Math.min(10,emu.throttle_delay_ms(performance.now()))));
+          }
+          const times = [...uart.matchAll(/TIME (\d\d):(\d\d):(\d\d) \| SERVO (\d+) (\d+) (\d+)/g)];
+          if (times.length<2 || !net.ntpReplies || !servo.every(s=>s.active)) throw Error('Missing real NTP synchronization or PWM output: '+JSON.stringify({ntp:net.ntpReplies,dns:net.dnsReplies,servo}));
+          const last=times.at(-1);
+          const guest=Number(last[1])*3600+Number(last[2])*60+Number(last[3]);
+          const host=(Math.floor(Date.now()/1000)+8*3600)%86400;
+          const drift=Math.min(Math.abs(host-guest),86400-Math.abs(host-guest));
+          if (drift>15) throw Error('NTP guest time differs from virtual clock by '+drift+'s');
+          for (let i=0;i<3;i++) {
+            if (Math.abs(servo[i].angle-Number(last[4+i]))>4) throw Error('PWM angle differs from firmware command on GPIO'+servo[i].pin);
+            if (Math.abs(servo[i].hz-50)>1) throw Error('Incorrect PWM frequency');
+          }
+          const result={chip:'esp32s3',cores:emu.num_harts(),ntpReplies:net.ntpReplies,dnsReplies:net.dnsReplies,servo,verified:true};
+          fs.writeFileSync('dist/firmware/verification.json',JSON.stringify(result,null,2));
+          console.log('\nVERIFIED',JSON.stringify(result));
+          emu.free();
+          JS
+      - name: Package static website
+        run: |
+          cp index.html clock.html dist/
+          touch dist/.nojekyll
+          sha256sum dist/firmware/clock.bin > dist/firmware/SHA256SUMS
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Deploy verified clock
+        id: deployment
+        uses: actions/deploy-pages@v4
