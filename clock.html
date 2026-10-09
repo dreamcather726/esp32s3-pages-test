@@ -116,7 +116,7 @@ function udpReply(frame, data, addresses = null) {
 }
 
 class VirtualNetwork {
-  constructor(now = () => Date.now()) { this.now = now; this.ntpReplies = 0; this.dnsReplies = 0; this.dhcpReplies = 0; this.frames = 0; }
+  constructor(now = () => Date.now()) { this.now = now; this.ntpEnabled = true; this.ntpReplies = 0; this.dnsReplies = 0; this.dhcpReplies = 0; this.frames = 0; }
   reply(frame) {
     this.frames++;
     if (frame.length < 42) return null;
@@ -155,6 +155,7 @@ class VirtualNetwork {
       return udpReply(frame,bootp,{source:IP,destination:new Uint8Array([255,255,255,255])});
     }
     if (port === 123 && data.length >= 48) {
+      if (!this.ntpEnabled) return null;
       const ntp = new Uint8Array(48); ntp[0] = 0x24; ntp[1] = 1; ntp[2] = 6; ntp[3] = 0xec;
       ntp.set([76, 79, 67, 76], 12); ntp.set(data.subarray(40, 48), 24);
       const stamp = this.now() / 1000 + 2208988800;
@@ -225,7 +226,7 @@ function tick() {
     const started = performance.now(); let text = '', delay = 0;
     do {
       text += emu.run_batch(30000);
-      if (networkEnabled) net.pump(emu); else emu.wifi_tx_drain();
+      net.ntpEnabled = networkEnabled; net.pump(emu);
       if (emu.needs_restart()) { emu.restart(); send({ type: 'uart', text: '\n[固件重启]\n' }); break; }
       delay = Math.min(20, emu.throttle_delay_ms(performance.now()));
       if (delay > 0) break;
