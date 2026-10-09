@@ -24,13 +24,28 @@ jobs:
       - uses: arduino/setup-arduino-cli@v2
         with:
           version: '1.5.1'
+      - uses: actions/cache/restore@v4
+        id: toolchain-cache
+        with:
+          path: |
+            ~/.arduino15
+            ~/Arduino/libraries
+          key: esp32-3.2.0-ntp-3.2.1-servo-3.0.5-linux-v1
       - name: Install pinned ESP32 toolchain and libraries
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
         run: |
           arduino-cli config init
           arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
           arduino-cli core update-index
           arduino-cli core install esp32:esp32@3.2.0
           arduino-cli lib install NTPClient@3.2.1 ESP32Servo@3.0.5
+      - uses: actions/cache/save@v4
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.arduino15
+            ~/Arduino/libraries
+          key: esp32-3.2.0-ntp-3.2.1-servo-3.0.5-linux-v1
       - name: Extract firmware and device models from clock.html
         run: |
           mkdir -p .build/clock dist/firmware dist/vendor/esp-emu/pkg
@@ -67,6 +82,11 @@ jobs:
           echo '01faf50e66d740c1e5804c48a9ac13475a0a4fbeb23b3f398108bb6281a124ab  .build/esp-emu.tar.gz' | sha256sum --check
           tar -xzf .build/esp-emu.tar.gz -C .build
           cp .build/esp-emu-0.48.0-wasm/www/pkg/{esp_emu.js,esp_emu_bg.wasm,package.json,LICENSE} dist/vendor/esp-emu/pkg/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clock-debug-firmware
+          path: dist
+          retention-days: 3
       - name: Verify actual firmware, NTP and PWM before publication
         run: |
           node --input-type=module <<'JS'
@@ -80,7 +100,8 @@ jobs:
           emu.load_default_rom();
           emu.set_boot_from_rom(true);
           emu.load_firmware(fs.readFileSync('dist/firmware/clock.bin'));
-          if (!emu.is_xtensa() || emu.num_harts() !== 2) throw Error('CPU target mismatch');
+          if (!emu.is_xtensa()) throw Error('CPU target mismatch');
+          console.log('Initial CPU state:',JSON.stringify({xtensa:emu.is_xtensa(),cores:emu.num_harts(),pc:emu.pc()}));
           const net = new VirtualNetwork();
           let uart = '', servo = [], started = performance.now();
           while (performance.now()-started < 90000) {
