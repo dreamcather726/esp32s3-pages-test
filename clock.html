@@ -14,7 +14,7 @@
 </main>
 <input id="file" type="file" accept=".bin,application/octet-stream">
 <dialog id="help-dialog"><button id="close-help">关闭</button><h2>真实固件的三舵机时钟</h2><p>点击运行后，ESP-EMU 执行编译后的 ESP32-S3 Flash 镜像。时针、分针、秒针舵机分别连接 GPIO13、GPIO12、GPIO14；舵机显示由固件设置的 LEDC PWM 寄存器驱动。</p><p>网页提供虚拟 DNS / UDP / NTP 服务：NTP 请求得到浏览器系统时间的回复，不访问公网 pool.ntp.org。可以关闭校时来观察固件的等待和重试。这里的 Wi-Fi 是虚拟接入点。</p><p>可点击两个引脚接线、删除连接或拖动元件。电源与地断开时，舵机不会显示有效输出。舵机是理想位置模型，范围 0–180°，默认脉宽 544–2400 µs；电路不计算真实电流、电源压降和机械负载。</p><p>本页显示源代码，也接受合并后的 ESP32-S3 .bin。编辑代码后须重新编译；将仓库 clock.html 中 source-code 区域的代码修改并提交，GitHub Actions 会编译后发布。普通应用 .bin 缺少 bootloader 和分区表，不能直接加载。</p><p><a href="https://github.com/espressif/esp-emulator" target="_blank" rel="noopener">ESP-EMU 与 Apache-2.0 许可</a> · <a href="./vendor/esp-emu/pkg/LICENSE" target="_blank">内核许可证</a></p></dialog>
-<script type="text/plain" id="source-code">#include <WiFi.h>
+<script type="text/plain" id="source-code" data-revision="ed5345905354db37">#include <WiFi.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 #include <ESP32Servo.h>
@@ -386,7 +386,7 @@ function createWorker() {
 async function loadFirmware(autoStart = true) {
   if (busy) return; busy = true; running = false; loaded = false; startRequested = autoStart; signals = []; controls(); $('status').textContent = '加载内核与固件…';
   try {
-    if (!firmware) { const response = await fetch('./firmware/clock.bin'); if (!response.ok) throw new Error('内置固件尚未构建，请检查 GitHub Actions。'); firmware = await response.arrayBuffer(); const elfResponse = await fetch('./firmware/clock.elf'); if (elfResponse.ok) appElf = await elfResponse.arrayBuffer(); }
+    if (!firmware) { const base = './firmware/clock-' + $('source-code').dataset.revision; const response = await fetch(base + '.bin'); if (!response.ok) throw new Error('当前源码对应的内置固件尚未构建，请检查 GitHub Actions。'); firmware = await response.arrayBuffer(); const elfResponse = await fetch(base + '.elf'); if (elfResponse.ok) appElf = await elfResponse.arrayBuffer(); }
     if (firmware.byteLength < 65536 || firmware.byteLength > 32 * 1024 * 1024) throw new Error('请选择包含 bootloader、分区表和应用的合并 .bin（64 KB–32 MB）。');
     createWorker(); worker.postMessage({ type: 'network', enabled: $('network').checked });
     const copy = firmware.slice(0); worker.postMessage({ type: 'load', firmware: copy, elf: appElf, engineUrl: new URL('./vendor/esp-emu/pkg/esp_emu.js', location.href).href }, [copy]);
