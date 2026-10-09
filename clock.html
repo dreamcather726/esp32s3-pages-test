@@ -33,6 +33,13 @@ bool synchronized = false;
 void setup() {
   Serial.begin(115200);
   Serial.println("ESP32-S3 servo clock: real firmware booting");
+  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+    Serial.printf("WIFI EVENT %d\n", static_cast<int>(event));
+    if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) Serial.printf("WIFI disconnect reason %d\n", info.wifi_sta_disconnected.reason);
+  });
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.setMinSecurity(WIFI_AUTH_OPEN);
   WiFi.begin(ssid, password);
   unsigned long started = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - started < 20000) {
@@ -213,6 +220,8 @@ self.onmessage = async ({ data: m }) => {
       running = false; clearTimeout(loopId); if (!init) ({ default: init, WasmEmulator } = await import(m.engineUrl)); await init(); emu?.free();
       emu = new WasmEmulator('esp32s3'); emu.set_wifi_config('Wokwi-GUEST', '');
       emu.load_default_rom(); emu.set_boot_from_rom(true); emu.load_firmware(new Uint8Array(m.firmware));
+      if (m.elf) emu.load_app_elf(new Uint8Array(m.elf));
+      emu.set_wifi_auth('Wokwi-GUEST', '', 'open', 'both');
       net = new VirtualNetwork();
       if (!emu.is_xtensa()) throw new Error('固件未初始化 ESP32-S3 Xtensa 内核');
       send({ type: 'loaded', cores: emu.num_harts(), cpuMHz: emu.cycles_per_us() }); snapshot(true);
@@ -236,7 +245,7 @@ let wires = servoDefs.flatMap(s => [
   { a: 'board:L20', b: `${s.id}:V+`, color: '#cf7a75' },
   { a: 'board:L21', b: `${s.id}:GND`, color: '#53675b' },
 ]);
-let worker, firmware, running = false, busy = false, pendingPin = null, signals = [], loaded = false, serialTail = '', zoom = 1;
+let worker, firmware, appElf, running = false, busy = false, pendingPin = null, signals = [], loaded = false, serialTail = '', zoom = 1;
 let startRequested = false, sourceDirty = false;
 const esc = x => String(x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function endpoint(id) {
@@ -321,10 +330,10 @@ function createWorker() {
 async function loadFirmware(autoStart = true) {
   if (busy) return; busy = true; running = false; loaded = false; startRequested = autoStart; signals = []; controls(); $('status').textContent = '加载内核与固件…';
   try {
-    if (!firmware) { const response = await fetch('./firmware/clock.bin'); if (!response.ok) throw new Error('内置固件尚未构建，请检查 GitHub Actions。'); firmware = await response.arrayBuffer(); }
+    if (!firmware) { const response = await fetch('./firmware/clock.bin'); if (!response.ok) throw new Error('内置固件尚未构建，请检查 GitHub Actions。'); firmware = await response.arrayBuffer(); const elfResponse = await fetch('./firmware/clock.elf'); if (elfResponse.ok) appElf = await elfResponse.arrayBuffer(); }
     if (firmware.byteLength < 65536 || firmware.byteLength > 32 * 1024 * 1024) throw new Error('请选择包含 bootloader、分区表和应用的合并 .bin（64 KB–32 MB）。');
     createWorker(); worker.postMessage({ type: 'network', enabled: $('network').checked });
-    const copy = firmware.slice(0); worker.postMessage({ type: 'load', firmware: copy, engineUrl: new URL('./vendor/esp-emu/pkg/esp_emu.js', location.href).href }, [copy]);
+    const copy = firmware.slice(0); worker.postMessage({ type: 'load', firmware: copy, elf: appElf, engineUrl: new URL('./vendor/esp-emu/pkg/esp_emu.js', location.href).href }, [copy]);
   } catch (e) { stopWithError(e.message); }
 }
 function start() { if (!loaded) { loadFirmware(); return; } running = true; $('status').textContent = '运行中'; worker.postMessage({ type: 'start' }); controls(); }
@@ -332,7 +341,7 @@ $('run').onclick = start;
 $('pause').onclick = () => { running = false; worker?.postMessage({ type: 'pause' }); $('status').textContent = '已暂停'; controls(); };
 $('reset').onclick = () => { worker?.terminate(); worker = null; busy = false; running = false; loaded = false; signals = []; serialTail = ''; $('clock-time').textContent = '--:--:--'; log('\n[重新启动]\n'); loadFirmware(); };
 $('load').onclick = () => $('file').click();
-$('file').onchange = async () => { const file = $('file').files[0]; if (!file) return; if (file.size > 32*1024*1024) { log('\n固件超过 32 MB。\n'); return; } firmware = await file.arrayBuffer(); $('firmware-name').textContent = file.name; await loadFirmware(); $('file').value = ''; };
+$('file').onchange = async () => { const file = $('file').files[0]; if (!file) return; if (file.size > 32*1024*1024) { log('\n固件超过 32 MB。\n'); return; } firmware = await file.arrayBuffer(); appElf = null; $('firmware-name').textContent = file.name; await loadFirmware(); $('file').value = ''; };
 $('network').onchange = () => worker?.postMessage({ type: 'network', enabled: $('network').checked });
 $('clear').onclick = () => { $('console').textContent = ''; };
 $('serial-form').onsubmit = e => { e.preventDefault(); if (worker && loaded) worker.postMessage({ type: 'uart', text: $('serial-text').value + '\n' }); $('serial-text').value = ''; };
