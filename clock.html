@@ -19,73 +19,108 @@
 #include <WiFiUdp.h>
 #include <ESP32Servo.h>
 
+// 仿真的虚拟 WiFi 接入点
 const char* ssid = "Wokwi-GUEST";
 const char* password = "";
-Servo hourServo, minuteServo, secondServo;
-const int hourPin = 13, minutePin = 12, secondPin = 14;
+Servo hourServo;    // 时针舵机
+Servo minuteServo;  // 分针舵机
+Servo secondServo;  // 秒针舵机
+const int hourPin = 13;
+const int minutePin = 12;
+const int secondPin = 14;
 WiFiUDP ntpUDP;
-// The browser's virtual UDP/NTP service answers this hostname locally.
+// 仿真网页响应 NTP 请求；东八区偏移由本固件计算
 NTPClient timeClient(ntpUDP, "pool.ntp.org", 8 * 3600, 60000);
+int hours = 0;
+int minutes = 0;
+int seconds = 0;
+// 根据需要调整各舵机的运动角度范围
+const int HOUR_MIN_ANGLE = 0;
+const int HOUR_MAX_ANGLE = 180;
+const int MINUTE_MIN_ANGLE = 0;
+const int MINUTE_MAX_ANGLE = 180;
+const int SECOND_MIN_ANGLE = 0;
+const int SECOND_MAX_ANGLE = 180;
 unsigned long lastUpdate = 0;
-bool ready = false;
-bool synchronized = false;
+const unsigned long updateInterval = 1000;
+bool timeSynchronized = false;
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("ESP32-S3 servo clock: real firmware booting");
-  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
-    Serial.printf("WIFI EVENT %d\n", static_cast<int>(event));
-    if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) Serial.printf("WIFI disconnect reason %d\n", info.wifi_sta_disconnected.reason);
-  });
+  Serial.println("ESP32-S3网络舵机时钟初始化中...");
+  // ESP32-S3 仿真使用开放的虚拟接入点
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   WiFi.setMinSecurity(WIFI_AUTH_OPEN);
   WiFi.begin(ssid, password);
-  unsigned long started = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - started < 20000) {
+  Serial.print("正在连接到WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("\nWiFi timeout. Check emulator SSID settings and restart.");
-    return;
-  }
-  Serial.print("\nWiFi connected: ");
+  Serial.println("\nWiFi已连接");
+  Serial.print("IP地址: ");
   Serial.println(WiFi.localIP());
   timeClient.begin();
+  // 与网页舵机模型保持一致：50 Hz，544～2400 微秒
   hourServo.setPeriodHertz(50);
   minuteServo.setPeriodHertz(50);
   secondServo.setPeriodHertz(50);
   hourServo.attach(hourPin, 544, 2400);
   minuteServo.attach(minutePin, 544, 2400);
   secondServo.attach(secondPin, 544, 2400);
+  // 普通 180 度舵机的初始中位；不代表完整钟面的 12 点
   hourServo.write(90);
   minuteServo.write(90);
   secondServo.write(90);
-  ready = true;
-  Serial.println("Servos ready: GPIO13 / GPIO12 / GPIO14. Waiting for NTP.");
+  delay(1000);
+  Serial.println("时钟初始化完成，开始运行...");
 }
 
 void loop() {
-  if (!ready) { delay(100); return; }
-  if (millis() - lastUpdate < 1000) { delay(10); return; }
-  lastUpdate = millis();
-  if (timeClient.update()) synchronized = true;
-  if (!synchronized) {
-    Serial.println("Waiting for virtual NTP reply...");
-    return;
+  if (millis() - lastUpdate >= updateInterval) {
+    lastUpdate = millis();
+    if (timeClient.update()) timeSynchronized = true;
+    // 首次 NTP 成功前保持中位，避免显示未经校时的时间
+    if (!timeSynchronized) {
+      Serial.println("等待NTP校时...");
+      return;
+    }
+    hours = timeClient.getHours();
+    minutes = timeClient.getMinutes();
+    seconds = timeClient.getSeconds();
+    // 12 点和 0 点均从一个 12 小时周期的起点计算
+    hours %= 12;
+    // 沿用原项目的 map() 角度计算和可调整范围
+    float hourProgress = hours + (minutes / 60.0);
+    int hourAngle = map(hourProgress * 60, 0, 12 * 60,
+                        HOUR_MIN_ANGLE, HOUR_MAX_ANGLE);
+    float minuteProgress = minutes + (seconds / 60.0);
+    int minuteAngle = map(minuteProgress * 60, 0, 60 * 60,
+                          MINUTE_MIN_ANGLE, MINUTE_MAX_ANGLE);
+    int secondAngle = map(seconds, 0, 60,
+                          SECOND_MIN_ANGLE, SECOND_MAX_ANGLE);
+    hourServo.write(hourAngle);
+    minuteServo.write(minuteAngle);
+    secondServo.write(secondAngle);
+    Serial.print("时间: ");
+    if (timeClient.getHours() < 10) Serial.print("0");
+    Serial.print(timeClient.getHours());
+    Serial.print(":");
+    if (minutes < 10) Serial.print("0");
+    Serial.print(minutes);
+    Serial.print(":");
+    if (seconds < 10) Serial.print("0");
+    Serial.print(seconds);
+    Serial.print(" | 舵机角度 - 时: ");
+    Serial.print(hourAngle);
+    Serial.print("°, 分: ");
+    Serial.print(minuteAngle);
+    Serial.print("°, 秒: ");
+    Serial.print(secondAngle);
+    Serial.println("°");
   }
-  int hours = timeClient.getHours() % 12;
-  int minutes = timeClient.getMinutes();
-  int seconds = timeClient.getSeconds();
-  int hourAngle = (hours * 60 + minutes) * 180 / 720;
-  int minuteAngle = (minutes * 60 + seconds) * 180 / 3600;
-  int secondAngle = seconds * 180 / 60;
-  hourServo.write(hourAngle);
-  minuteServo.write(minuteAngle);
-  secondServo.write(secondAngle);
-  Serial.printf("TIME %02d:%02d:%02d | SERVO %d %d %d\n",
-    timeClient.getHours(), minutes, seconds, hourAngle, minuteAngle, secondAngle);
+  delay(1);
 }
 </script>
 <script type="text/plain" id="worker-code">// In-browser device model: Ethernet/IPv4/UDP responses, no public network access.
@@ -330,7 +365,7 @@ svg.addEventListener('pointermove', e => { if (!drag) return; const p = point(e)
 svg.addEventListener('pointerup', () => { drag = null; }); svg.addEventListener('pointercancel', () => { drag = null; });
 function view(z) { zoom = Math.max(.65, Math.min(1.5, z)); const w = 900 / zoom, h = 600 / zoom; svg.setAttribute('viewBox', `${(900-w)/2} ${(600-h)/2} ${w} ${h}`); }
 $('plus').onclick = () => view(zoom + .1); $('minus').onclick = () => view(zoom - .1); $('fit').onclick = () => view(1);
-function log(text) { const clean = text.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, ''); $('console').textContent = ($('console').textContent + clean).slice(-60000); $('console').scrollTop = $('console').scrollHeight; serialTail = (serialTail + clean).slice(-1024); const times = [...serialTail.matchAll(/TIME (\d{2}:\d{2}:\d{2})/g)]; if (times.length) $('clock-time').textContent = times.at(-1)[1]; }
+function log(text) { const clean = text.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, ''); $('console').textContent = ($('console').textContent + clean).slice(-60000); $('console').scrollTop = $('console').scrollHeight; serialTail = (serialTail + clean).slice(-1024); const times = [...serialTail.matchAll(/(?:TIME |时间:\s*)(\d{2}:\d{2}:\d{2})/g)]; if (times.length) $('clock-time').textContent = times.at(-1)[1]; }
 function controls() { $('run').disabled = busy || running; $('pause').disabled = !running; $('reset').disabled = busy; $('load').disabled = busy; }
 function stopWithError(message) { busy = false; running = false; $('status').textContent = '运行失败'; log('\n[错误] ' + message + '\n'); controls(); }
 function createWorker() {
