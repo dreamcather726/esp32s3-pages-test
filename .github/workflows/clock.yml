@@ -117,6 +117,7 @@ jobs:
             const drift=emu.throttle_delay_ms(performance.now());
             if (drift>0) await sleep(Math.min(10,drift));
           }
+          servo = readServoSignals(emu);
           const times = [...uart.matchAll(/TIME (\d\d):(\d\d):(\d\d) \| SERVO (\d+) (\d+) (\d+)/g)];
           if (times.length<2 || !net.ntpReplies || !servo.every(s=>s.active)) throw Error('Missing real NTP synchronization or PWM output: '+JSON.stringify({ntp:net.ntpReplies,dns:net.dnsReplies,servo}));
           const last=times.at(-1);
