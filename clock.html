@@ -1,411 +1,284 @@
 <!doctype html>
-<html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="运行真实 ESP32-S3 固件的三舵机时钟实验，支持串口、PWM 寄存器和虚拟 NTP 校时。"><title>S3 Lab · 三舵机时钟</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%2315251e'/%3E%3Ccircle cx='20' cy='20' r='12' fill='none' stroke='%23a4e8bb' stroke-width='3'/%3E%3Cpath d='M20 12v8l5 3' fill='none' stroke='%23a4e8bb' stroke-width='3'/%3E%3C/svg%3E">
-<style>
-:root{font-family:'Segoe UI','Microsoft YaHei',sans-serif;font-size:14px;background:#f1f4f0;color:#22342a;--green:#a4e8bb;--line:#dbe3db}*{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit}button,a.action{border:1px solid var(--line);border-radius:7px;background:white;padding:9px 12px;cursor:pointer;color:#35503e;text-decoration:none;font-size:13px}button:hover,a.action:hover{background:#eaf5eb}button:disabled{opacity:.45;cursor:default}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #258650;outline-offset:3px}.top{height:68px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:24px;padding:0 24px}.brand{font-weight:700;letter-spacing:1px;font-size:18px;display:flex;align-items:center;gap:9px;text-decoration:none;color:#243b2c}.logo{display:grid;place-items:center;background:#203f2b;color:var(--green);width:33px;height:33px;border-radius:7px;font:700 14px monospace}.title{font-weight:600}.badge{font-size:12px;color:#62836a;background:#edf6ee;padding:5px 9px;border-radius:5px}.links{margin-left:auto;display:flex;gap:8px}.layout{height:calc(100dvh - 68px);min-height:760px;display:grid;grid-template-columns:minmax(340px,38%) 1fr}.editor{display:flex;flex-direction:column;min-width:0;background:#142119;color:#bfd5c5}.filebar{height:49px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid #314335}.filebar strong{font-size:14px;font-weight:500}.filebar span{font:12px monospace;color:#8caf94}.source-tools{display:flex;gap:8px;padding:10px 16px;border-bottom:1px solid #304331;align-items:center}.source-tools button{font-size:12px;background:#263d2c;color:#c3deca;border:0;padding:7px 9px}.source-tools span{color:#8eab96;font-size:12px;margin-left:auto}textarea#code{width:100%;flex:1;min-height:270px;resize:none;border:0;padding:18px 21px;background:#142119;color:#c5e0cd;font:13px/1.75 Consolas,monospace;white-space:pre;tab-size:2;outline-offset:-3px}.source-note{font-size:12px;line-height:1.7;padding:9px 17px;color:#8fad96;border-top:1px solid #304331}.source-note a{color:#b1dabb}.serial{height:225px;background:#0b1810;border-top:1px solid #304331;display:flex;flex-direction:column}.serialbar{padding:10px 17px;display:flex;gap:12px;align-items:center;border-bottom:1px solid #263c2b;font-size:13px}.serialbar small{margin-left:auto;color:#719680}.serialbar button{padding:2px 7px;font-size:12px;background:transparent;color:#8aac94;border:0}#console{margin:0;flex:1;overflow:auto;padding:12px 17px;font:12px/1.65 Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:#a9d2b4}.serial-input{display:flex;border-top:1px solid #263c2b;padding:5px 10px;gap:8px}.serial-input input{width:100%;min-width:0;background:transparent;border:0;color:#c3deca;font-size:12px;padding:5px}.serial-input button{font-size:12px;background:#233c2b;border:0;color:#c3deca;padding:3px 9px}.sim{display:flex;flex-direction:column;min-width:0}.toolbar{display:flex;align-items:center;gap:8px;background:#fff;padding:12px 19px;border-bottom:1px solid var(--line)}#run{background:var(--green);border-color:var(--green);font-weight:600;min-width:115px}#status{font-size:12px;color:#788e7d;margin-left:auto}#elapsed{font:12px monospace;color:#78927e;min-width:68px}.canvas{position:relative;flex:1;min-height:415px;overflow:hidden;background-color:#f3f6f0;background-image:radial-gradient(#c4d1c2 .8px,transparent .8px);background-size:19px 19px}.canvas-title{position:absolute;top:17px;left:22px;font-size:12px;color:#6a826e}.canvas-title span{margin-left:10px;color:#94a692}.view-controls{position:absolute;bottom:16px;right:17px;display:flex;gap:3px;background:#ffffffde;border:1px solid var(--line);border-radius:7px}.view-controls button{border:0;background:transparent;font-size:15px;padding:5px 10px}.hint{position:absolute;left:22px;bottom:18px;font-size:12px;color:#8a9e8d;pointer-events:none}#circuit{width:100%;height:100%;position:absolute;inset:0;user-select:none;touch-action:none}svg text{font-family:Consolas,'Microsoft YaHei',monospace}.drag-part{cursor:grab}.drag-part:active{cursor:grabbing}.pin{cursor:crosshair}.pin:hover circle,.pin.active circle{fill:#91e4ac;stroke:#21894b;stroke-width:2}.wire{cursor:pointer}.wire:hover{stroke-width:5}.servo-arm{transition:transform .15s ease;transform-box:fill-box;transform-origin:center}.readings{background:white;border-top:1px solid var(--line);padding:17px 21px}.readings-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.readings-head strong{font-size:13px;font-weight:600}.time{font:600 24px Consolas,monospace;color:#284d34;letter-spacing:2px}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.reading{background:#f5f8f3;border:1px solid #e0e8dd;border-radius:8px;padding:11px 13px}.reading-header{display:flex;align-items:center;gap:7px;font-size:12px;color:#68816b}.reading-header i{width:7px;height:7px;border-radius:50%;background:var(--color)}.reading strong{display:block;margin:7px 0 3px;font:24px Consolas,monospace;color:#324b37}.reading small{font:12px Consolas,monospace;color:#8fa28f}.network-row{display:flex;align-items:center;gap:13px;flex-wrap:wrap;margin-top:13px;font-size:12px;color:#809682}.network-row label{display:flex;align-items:center;gap:6px}.network-row input{accent-color:#4b9d61}.network-row b{font-weight:500;color:#548264}#warning{color:#b47737;font-size:12px;line-height:1.7;margin-top:8px}.bottom{padding:10px 21px;border-top:1px solid var(--line);font-size:12px;color:#849989;display:flex;gap:10px;justify-content:space-between;background:#f9fbf7}.bottom a{color:#688774}.bottom details{max-width:70%}#wires-list{padding-top:8px}.wire-row{display:flex;align-items:center;gap:9px;margin:4px 0}.wire-row button{font-size:11px;padding:2px 7px}dialog{border:1px solid var(--line);border-radius:13px;max-width:620px;width:calc(100% - 32px);padding:28px;color:#36513e;box-shadow:0 20px 80px #10221933}dialog::backdrop{background:#112d21b3;backdrop-filter:blur(3px)}dialog h2{font-size:21px;margin:0 0 15px}dialog p{font-size:15px;line-height:1.8;color:#6b8170}dialog button{float:right}dialog a{color:#25834a}#file{display:none}@media(max-width:1000px){.top{padding:0 15px;gap:13px}.badge{display:none}.links a{font-size:12px;padding:7px 9px}.toolbar{flex-wrap:wrap;padding:10px}.toolbar button{font-size:12px}.bottom>span{display:none}.reading{padding:9px}.network-row{gap:8px}}@media(max-width:760px){.top{height:auto;min-height:64px;flex-wrap:wrap;padding:12px 15px}.title{font-size:13px}.links{gap:5px}.layout{display:flex;flex-direction:column;height:auto;min-height:0}.sim{order:1}.editor{order:2;height:700px}.canvas{height:440px;flex:none}.cards{gap:7px}.reading strong{font-size:21px}.hint{max-width:240px;font-size:11px}.readings{padding:15px}.source-tools span{display:none}.bottom{padding:10px 15px}.time{font-size:22px}}@media(prefers-reduced-motion:reduce){.servo-arm{transition:none}}
-</style></head>
-<body>
-<header class="top"><a class="brand" href="./"><span class="logo">S3</span>S3 LAB</a><span class="title">三舵机网络时钟</span><span class="badge">ESP32-S3 · 真实固件</span><div class="links"><button id="help">使用说明</button><a class="action" href="https://github.com/dreamcather726/esp32s3-pages-test" target="_blank" rel="noopener">项目代码</a></div></header>
-<main class="layout">
-<section class="editor" aria-label="固件源代码与串口"><div class="filebar"><strong>&lt;/&gt; clock.ino</strong><span>ARDUINO ESP32 · 3.2.0</span></div><div class="source-tools"><button id="download-code">下载代码</button><button id="restore-code">恢复示例</button><span id="source-state">已编译示例</span></div><textarea id="code" aria-label="Arduino C++ 源代码" spellcheck="false" wrap="off"></textarea><div class="source-note">编辑后需重新编译并加载合并固件；当前运行的固件不会随编辑改变。<a href="https://github.com/dreamcather726/esp32s3-pages-test/actions" target="_blank" rel="noopener">在 GitHub 构建</a></div><section class="serial" aria-label="串口监视器"><div class="serialbar"><span>›_ 串口监视器</span><small>UART0 · 115200</small><button id="clear">清空</button></div><pre id="console" role="log">点击「运行仿真」启动真实 ESP32-S3 固件。
-首次启动需加载仿真内核和固件。
-</pre><form class="serial-input" id="serial-form"><input id="serial-text" aria-label="向 UART0 发送文字" placeholder="发送文字到 UART0…" maxlength="1024"><button type="submit">发送</button></form></section></section>
-<section class="sim" aria-label="电路仿真"><div class="toolbar"><button id="run">▶ 运行仿真</button><button id="pause" disabled>暂停</button><button id="reset">重启</button><button id="load">加载固件</button><span id="status" role="status">就绪</span><span id="elapsed">0.000 s</span></div><div class="canvas"><div class="canvas-title">ESP32-S3-DevKitC-1 v1.1 <span>3 个舵机 · 50 Hz</span></div><svg id="circuit" viewBox="0 0 900 600" role="group" aria-label="交互电路：点击两个引脚接线，拖动元件移动"><g id="wire-layer"></g><g id="part-layer"></g></svg><span class="hint" id="hint">点击两个引脚接线 · 拖动元件移动</span><div class="view-controls"><button id="minus" aria-label="缩小">−</button><button id="fit" aria-label="重置视图">⌖</button><button id="plus" aria-label="放大">＋</button></div></div><div class="readings"><div class="readings-head"><strong>舵机输出 · 从 LEDC 寄存器读取</strong><span class="time" id="clock-time">--:--:--</span></div><div class="cards" id="readings"></div><div class="network-row"><label><input type="checkbox" id="network" checked>虚拟 NTP 校时</label><span>时间源：浏览器系统时间（东八区由固件转换）</span><b id="ntp-status">等待请求</b></div><div class="network-row"><span id="cpu">Xtensa LX7 · 等待启动</span><span id="firmware-name">内置时钟固件</span></div><div id="warning" role="status"></div></div><div class="bottom"><details><summary>接线列表 <span id="wire-count"></span></summary><div id="wires-list"></div></details><span>ESP-EMU 0.48.0 · WASM</span></div></section>
-</main>
-<input id="file" type="file" accept=".bin,application/octet-stream">
-<dialog id="help-dialog"><button id="close-help">关闭</button><h2>真实固件的三舵机时钟</h2><p>点击运行后，ESP-EMU 执行编译后的 ESP32-S3 Flash 镜像。时针、分针、秒针舵机分别连接 GPIO13、GPIO12、GPIO14；舵机显示由固件设置的 LEDC PWM 寄存器驱动。</p><p>网页提供虚拟 DNS / UDP / NTP 服务：NTP 请求得到浏览器系统时间的回复，不访问公网 pool.ntp.org。可以关闭校时来观察固件的等待和重试。这里的 Wi-Fi 是虚拟接入点。</p><p>可点击两个引脚接线、删除连接或拖动元件。电源与地断开时，舵机不会显示有效输出。舵机是理想位置模型，范围 0–180°，默认脉宽 544–2400 µs；电路不计算真实电流、电源压降和机械负载。</p><p>本页显示源代码，也接受合并后的 ESP32-S3 .bin。编辑代码后须重新编译；将仓库 clock.html 中 source-code 区域的代码修改并提交，GitHub Actions 会编译后发布。普通应用 .bin 缺少 bootloader 和分区表，不能直接加载。</p><p><a href="https://github.com/espressif/esp-emulator" target="_blank" rel="noopener">ESP-EMU 与 Apache-2.0 许可</a> · <a href="./vendor/esp-emu/pkg/LICENSE" target="_blank">内核许可证</a></p></dialog>
-<script type="text/plain" id="source-code" data-revision="ed5345905354db37">#include <WiFi.h>
-#include <NTPClient.h>
-#include <WiFiUdp.h>
-#include <ESP32Servo.h>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>S3 Lab · 传感器实验</title><meta name="description" content="使用原时钟工作台布局的ESP32传感器实验：代码、串口、接线图与传感器状态。"><style>
+:root{font-family:'Segoe UI','Microsoft YaHei',sans-serif;font-size:14px;background:#f1f4f0;color:#22342a;--green:#a4e8bb;--line:#dbe3db}*{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit}button,a.action{border:1px solid var(--line);border-radius:7px;background:white;padding:8px 11px;cursor:pointer;color:#35503e;text-decoration:none;font-size:12px;white-space:nowrap}button:hover,a.action:hover{background:#eaf5eb}button:disabled{opacity:.4;cursor:default}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #258650;outline-offset:2px}input,select{border:1px solid var(--line);border-radius:6px;padding:7px 9px;color:#35503e;background:white;min-width:0}[hidden]{display:none!important}.top{min-height:64px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:18px;padding:12px 22px;flex-wrap:wrap}.brand{font-weight:700;letter-spacing:1px;font-size:18px;display:flex;align-items:center;gap:9px;text-decoration:none;color:#243b2c}.logo{display:grid;place-items:center;background:#203f2b;color:var(--green);width:33px;height:33px;border-radius:7px;font:700 14px monospace}.badge{font-size:12px;color:#62836a;background:#edf6ee;padding:5px 9px;border-radius:5px}.project-name{display:flex;align-items:center;gap:9px;font-size:12px;color:#7b9380}.project-name input{width:185px;border-color:transparent;background:#f2f6f0;font-weight:600}.links{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.projectbar{min-height:48px;padding:7px 22px;background:#f9fbf7;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:7px;flex-wrap:wrap}.projectbar select{font-size:12px}.projectbar .small{font-size:11px;color:#78937e;display:flex;align-items:center;gap:4px}.projectbar input[type=checkbox]{accent-color:#439959}.projectbar .spacer{width:8px}#project-status{font-size:12px;color:#709278;margin-left:auto}#project-status.error{color:#b55d40}.layout{height:calc(100dvh - 115px);min-height:780px;display:grid;grid-template-columns:minmax(300px,34%) 1fr}.editor{display:flex;flex-direction:column;min-width:0;background:#142119;color:#bfd5c5}.filebar{min-height:48px;display:flex;align-items:center;gap:7px;padding:9px 13px;border-bottom:1px solid #314335}.filebar select{background:#203427;color:#b8d7c1;border:0;flex:1;font:12px Consolas,monospace}.filebar button,.source-tools button{font-size:11px;background:#263d2c;color:#c3deca;border:0;padding:6px 8px}.source-tools{display:flex;gap:7px;padding:9px 13px;border-bottom:1px solid #304331;align-items:center}.source-tools span{color:#8eab96;font-size:11px;margin-left:auto}textarea#code{width:100%;flex:1;min-height:260px;resize:none;border:0;padding:17px 20px;background:#142119;color:#c5e0cd;font:12px/1.75 Consolas,monospace;white-space:pre;tab-size:2;outline-offset:-3px}.source-note{font-size:11px;line-height:1.7;padding:9px 15px;color:#8fad96;border-top:1px solid #304331}.source-note button{background:transparent;color:#b1dabb;padding:0;border:0;text-decoration:underline}.serial{height:215px;background:#0b1810;border-top:1px solid #304331;display:flex;flex-direction:column}.serialbar{padding:9px 15px;display:flex;gap:10px;align-items:center;border-bottom:1px solid #263c2b;font-size:12px}.serialbar small{margin-left:auto;color:#719680}.serialbar button{padding:2px 5px;font-size:11px;background:transparent;color:#8aac94;border:0}#console{margin:0;flex:1;overflow:auto;padding:10px 15px;font:11px/1.7 Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:#a9d2b4}.serial-input{display:flex;border-top:1px solid #263c2b;padding:5px 9px;gap:7px}.serial-input input{width:100%;background:transparent;border:0;color:#c3deca;font-size:11px;padding:4px}.serial-input button{font-size:11px;background:#233c2b;border:0;color:#c3deca;padding:3px 8px}.sim{display:flex;flex-direction:column;min-width:0}.toolbar{display:flex;align-items:center;gap:7px;background:#fff;padding:11px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}#run{background:var(--green);border-color:var(--green);font-weight:600;min-width:110px}#status{font-size:11px;color:#788e7d;margin-left:auto}#elapsed{font:11px monospace;color:#78927e;min-width:68px}.workspace{flex:1;min-height:410px;display:flex;min-width:0}.canvas{position:relative;flex:1;min-width:0;overflow:hidden;background-color:#f3f6f0;background-image:radial-gradient(#c4d1c2 .8px,transparent .8px);background-size:19px 19px}.canvas-title{position:absolute;top:15px;left:18px;font-size:11px;color:#6a826e;pointer-events:none;z-index:1}.canvas-title span{margin-left:10px;color:#94a692}.view-controls{position:absolute;bottom:15px;right:15px;display:flex;gap:3px;background:#ffffffdf;border:1px solid var(--line);border-radius:7px}.view-controls button{border:0;background:transparent;font-size:15px;padding:5px 9px}.hint{position:absolute;left:18px;bottom:15px;font-size:11px;color:#8a9e8d;pointer-events:none;max-width:65%}#circuit{width:100%;height:100%;position:absolute;inset:0;user-select:none;touch-action:none}svg text{font-family:Consolas,'Microsoft YaHei',monospace;pointer-events:none}.drag-part{cursor:grab}.drag-part:active{cursor:grabbing}.pin{cursor:crosshair}.pin:hover circle,.pin.active circle{fill:#91e4ac;stroke:#21894b;stroke-width:2}.wire{cursor:pointer;pointer-events:stroke}.wire:hover,.wire.selected{stroke-width:5}.switch{cursor:pointer}.selection{fill:none;stroke:#4b9d61;stroke-width:1.5;stroke-dasharray:5 4;pointer-events:none}.inspector{width:185px;flex:none;background:#fbfdf9;border-left:1px solid var(--line);padding:15px 12px;overflow:auto}.inspector h2{font-size:12px;margin:0 0 15px;color:#5b7862}.inspector label{display:flex;flex-direction:column;gap:5px;font-size:11px;color:#7b9581;margin-bottom:11px}.inspector input,.inspector select{width:100%;font-size:11px;padding:6px}.inspector .row{display:flex;gap:6px}.inspector button{font-size:11px;padding:6px 8px}.inspector p{font-size:11px;color:#91a393;line-height:1.8}.inspector input[type=color]{height:30px;padding:3px}.inspector #wire-title{overflow-wrap:anywhere}.readings{background:white;border-top:1px solid var(--line);padding:13px 17px;max-height:235px;overflow:auto}.readings-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.readings-head strong{font-size:12px;font-weight:600}.time{font:600 21px Consolas,monospace;color:#284d34;letter-spacing:2px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px}.reading{background:#f5f8f3;border:1px solid #e0e8dd;border-radius:7px;padding:9px 11px}.reading-header{display:flex;align-items:center;gap:6px;font-size:11px;color:#68816b}.reading-header i{width:6px;height:6px;border-radius:50%;background:var(--color)}.reading strong{display:block;margin:6px 0 3px;font:22px Consolas,monospace;color:#324b37}.reading small{font:10px Consolas,monospace;color:#839b86}.network-row{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-top:10px;font-size:10px;color:#809682}.network-row label{display:flex;align-items:center;gap:5px}.network-row input{accent-color:#4b9d61}.network-row b{font-weight:500;color:#548264}#warning{color:#b47737;font-size:11px;line-height:1.7;margin-top:6px}.bottom{padding:9px 17px;border-top:1px solid var(--line);font-size:11px;color:#849989;display:flex;gap:10px;justify-content:space-between;background:#f9fbf7}.bottom details{max-width:75%}#wires-list{padding-top:6px;max-height:150px;overflow:auto}.wire-row{display:flex;align-items:center;justify-content:space-between;gap:9px;margin:4px 0;font-family:Consolas,monospace}.wire-row button{font-size:10px;padding:2px 6px}.empty{font-size:12px;color:#8fa28f;margin:3px 0}dialog{border:1px solid var(--line);border-radius:12px;max-width:610px;width:calc(100% - 28px);padding:26px;color:#36513e;box-shadow:0 20px 80px #10221933}dialog::backdrop{background:#112d21aa;backdrop-filter:blur(3px)}dialog h2{font-size:21px;margin:0 0 15px}dialog p,dialog li{font-size:13px;line-height:1.8;color:#6b8170}dialog .close{float:right}dialog a{color:#25834a}dialog code{font-size:12px;background:#f0f5ef;padding:2px 4px;border-radius:4px}.palette{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.palette button{padding:20px;font-size:15px;text-align:left}.palette small{display:block;margin-top:8px;color:#859c89;font-size:11px}.dialog-actions{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}.dialog-actions button{float:none}dialog input[type=text]{width:100%;margin-top:10px}.error{color:#b55d40!important}#file,#project-file,#diagram-file{display:none}@media(max-width:1250px){.badge{display:none}.top{gap:10px;padding:11px 16px}.projectbar{padding:7px 16px}.inspector{width:162px}.layout{grid-template-columns:minmax(280px,33%) 1fr}.toolbar{gap:5px;padding:9px 12px}.toolbar button{padding:7px 9px;font-size:11px}.project-name input{width:160px}.projectbar .small{display:none}}@media(max-width:950px){.layout{grid-template-columns:minmax(260px,36%) 1fr}.inspector{width:140px;padding:12px 9px}.links a{display:none}.canvas-title{max-width:70%}.canvas-title span{display:none}.hint{font-size:10px}.top{gap:12px}.links{gap:5px}.cards{grid-template-columns:repeat(auto-fit,minmax(125px,1fr))}.network-row{font-size:10px}.readings{padding:10px}.bottom>span{display:none}}@media(max-width:760px){.top{padding:10px 12px}.brand{font-size:15px}.project-name{margin-left:auto}.project-name input{width:145px}.links{width:100%;margin-left:0;justify-content:flex-end}.projectbar{padding:7px 10px}.projectbar button{font-size:11px;padding:6px 8px}#project-status{width:100%;margin-left:0}.layout{display:flex;flex-direction:column;height:auto;min-height:0}.sim{order:1}.editor{order:2;height:650px}.workspace{height:460px;flex:none}.inspector{width:140px}.readings{max-height:330px}.toolbar{flex-wrap:wrap}.canvas-title{left:10px}.hint{left:10px;max-width:60%}.view-controls{right:8px;bottom:35px}.bottom{padding:9px 12px}.source-tools span{font-size:10px}dialog{padding:20px}.palette button{padding:14px}}
 
-// 仿真的虚拟 WiFi 接入点
-const char* ssid = "Wokwi-GUEST";
-const char* password = "";
-Servo hourServo;    // 时针舵机
-Servo minuteServo;  // 分针舵机
-Servo secondServo;  // 秒针舵机
-const int hourPin = 13;
-const int minutePin = 12;
-const int secondPin = 14;
-WiFiUDP ntpUDP;
-// 仿真网页响应 NTP 请求；东八区偏移由本固件计算
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 8 * 3600, 60000);
-int hours = 0;
-int minutes = 0;
-int seconds = 0;
-// 根据需要调整各舵机的运动角度范围
-const int HOUR_MIN_ANGLE = 0;
-const int HOUR_MAX_ANGLE = 180;
-const int MINUTE_MIN_ANGLE = 0;
-const int MINUTE_MAX_ANGLE = 180;
-const int SECOND_MIN_ANGLE = 0;
-const int SECOND_MAX_ANGLE = 180;
-unsigned long lastUpdate = 0;
-const unsigned long updateInterval = 1000;
-bool timeSynchronized = false;
-
-void setup() {
-  Serial.begin(115200);
-  Serial.println("ESP32-S3网络舵机时钟初始化中...");
-  // ESP32-S3 仿真使用开放的虚拟接入点
-  WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
-  WiFi.setMinSecurity(WIFI_AUTH_OPEN);
-  WiFi.begin(ssid, password);
-  Serial.print("正在连接到WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\nWiFi已连接");
-  Serial.print("IP地址: ");
-  Serial.println(WiFi.localIP());
-  timeClient.begin();
-  // 与网页舵机模型保持一致：50 Hz，544～2400 微秒
-  hourServo.setPeriodHertz(50);
-  minuteServo.setPeriodHertz(50);
-  secondServo.setPeriodHertz(50);
-  hourServo.attach(hourPin, 544, 2400);
-  minuteServo.attach(minutePin, 544, 2400);
-  secondServo.attach(secondPin, 544, 2400);
-  // 普通 180 度舵机的初始中位；不代表完整钟面的 12 点
-  hourServo.write(90);
-  minuteServo.write(90);
-  secondServo.write(90);
-  delay(1000);
-  Serial.println("时钟初始化完成，开始运行...");
-}
-
-void loop() {
-  if (millis() - lastUpdate >= updateInterval) {
-    lastUpdate = millis();
-    if (timeClient.update()) timeSynchronized = true;
-    // 首次 NTP 成功前保持中位，避免显示未经校时的时间
-    if (!timeSynchronized) {
-      Serial.println("等待NTP校时...");
-      return;
-    }
-    hours = timeClient.getHours();
-    minutes = timeClient.getMinutes();
-    seconds = timeClient.getSeconds();
-    // 12 点和 0 点均从一个 12 小时周期的起点计算
-    hours %= 12;
-    // 沿用原项目的 map() 角度计算和可调整范围
-    float hourProgress = hours + (minutes / 60.0);
-    int hourAngle = map(hourProgress * 60, 0, 12 * 60,
-                        HOUR_MIN_ANGLE, HOUR_MAX_ANGLE);
-    float minuteProgress = minutes + (seconds / 60.0);
-    int minuteAngle = map(minuteProgress * 60, 0, 60 * 60,
-                          MINUTE_MIN_ANGLE, MINUTE_MAX_ANGLE);
-    int secondAngle = map(seconds, 0, 60,
-                          SECOND_MIN_ANGLE, SECOND_MAX_ANGLE);
-    hourServo.write(hourAngle);
-    minuteServo.write(minuteAngle);
-    secondServo.write(secondAngle);
-    Serial.print("时间: ");
-    if (timeClient.getHours() < 10) Serial.print("0");
-    Serial.print(timeClient.getHours());
-    Serial.print(":");
-    if (minutes < 10) Serial.print("0");
-    Serial.print(minutes);
-    Serial.print(":");
-    if (seconds < 10) Serial.print("0");
-    Serial.print(seconds);
-    Serial.print(" | 舵机角度 - 时: ");
-    Serial.print(hourAngle);
-    Serial.print("°, 分: ");
-    Serial.print(minuteAngle);
-    Serial.print("°, 秒: ");
-    Serial.print(secondAngle);
-    Serial.println("°");
-  }
-  delay(1);
-}
-</script>
-<script type="text/plain" id="worker-code">// In-browser device model: Ethernet/IPv4/UDP responses, no public network access.
-// NTP packets use the browser's UTC system clock; timezone remains firmware-owned.
-function checksum(bytes) {
-  let sum = 0;
-  for (let i = 0; i < bytes.length; i += 2) sum += (bytes[i] << 8) + (bytes[i + 1] || 0);
-  while (sum >>> 16) sum = (sum & 65535) + (sum >>> 16);
-  return (~sum) & 65535;
-}
-const MAC = new Uint8Array([2, 83, 51, 0, 0, 1]);
-const IP = new Uint8Array([192, 168, 4, 1]);
-const u16 = (b, n) => (b[n] << 8) | b[n + 1];
-const put16 = (b, n, v) => { b[n] = v >>> 8; b[n + 1] = v; };
-const put32 = (b, n, v) => { new DataView(b.buffer, b.byteOffset, b.byteLength).setUint32(n, v >>> 0); };
-
-function udpReply(frame, data, addresses = null) {
-  const start = 14, ihl = (frame[start] & 15) * 4, udp = start + ihl;
-  const b = new Uint8Array(42 + data.length);
-  b.set(frame.subarray(6, 12), 0); b.set(MAC, 6); put16(b, 12, 0x0800);
-  b[14] = 0x45; put16(b, 16, 28 + data.length); b[22] = 64; b[23] = 17;
-  b.set(addresses?.source || frame.subarray(30, 34), 26); b.set(addresses?.destination || frame.subarray(26, 30), 30);
-  put16(b, 24, checksum(b.subarray(14, 34)));
-  put16(b, 34, u16(frame, udp + 2)); put16(b, 36, u16(frame, udp));
-  put16(b, 38, 8 + data.length); b.set(data, 42);
-  // A zero UDP checksum is explicitly allowed for IPv4.
-  return b;
-}
-
-class VirtualNetwork {
-  constructor(now = () => Date.now()) { this.now = now; this.ntpEnabled = true; this.ntpReplies = 0; this.dnsReplies = 0; this.dhcpReplies = 0; this.frames = 0; }
-  reply(frame) {
-    this.frames++;
-    if (frame.length < 42) return null;
-    const type = u16(frame, 12);
-    if (type === 0x0806 && frame.length >= 42 && u16(frame, 20) === 1) {
-      // Answer only for the gateway; answering the guest's DHCP address probe
-      // would falsely claim its IP and make lwIP decline the lease.
-      if (!frame.subarray(38,42).every((byte,i) => byte === IP[i])) return null;
-      const b = frame.slice(0, 42); b.set(frame.subarray(6, 12), 0); b.set(MAC, 6);
-      put16(b, 20, 2); b.set(MAC, 22); b.set(frame.subarray(38, 42), 28);
-      b.set(frame.subarray(22, 28), 32); b.set(frame.subarray(28, 32), 38); return b;
-    }
-    if (type !== 0x0800 || (frame[14] >>> 4) !== 4 || frame[23] !== 17) return null;
-    if ((u16(frame, 20) & 0x3fff) !== 0) return null; // no fragmented packets
-    const udp = 14 + (frame[14] & 15) * 4;
-    if (udp < 34 || udp + 8 > frame.length) return null;
-    const length = u16(frame, udp + 4);
-    if (length < 8 || udp + length > frame.length) return null;
-    const data = frame.subarray(udp + 8, udp + length), port = u16(frame, udp + 2);
-    if (port === 67 && u16(frame, udp) === 68 && data.length >= 240 && data[0] === 1 && data[1] === 1 && data[2] === 6 && u16(data,236) === 0x6382 && u16(data,238) === 0x5363) {
-      let type = 0, i = 240;
-      while (i < data.length && data[i] !== 255) {
-        const code = data[i++]; if (code === 0) continue;
-        if (i >= data.length) break;
-        const size = data[i++]; if (i + size > data.length) return null;
-        if (code === 53 && size === 1) type = data[i];
-        i += size;
-      }
-      if (type !== 1 && type !== 3 && type !== 8) return null;
-      const options = new Uint8Array([53,1,type === 1 ? 2 : 5,54,4,...IP,51,4,0,0,14,16,1,4,255,255,255,0,3,4,...IP,6,4,...IP,255]);
-      const bootp = new Uint8Array(240 + options.length);
-      bootp[0] = 2; bootp[1] = 1; bootp[2] = 6;
-      bootp.set(data.subarray(4,12),4); bootp.set([192,168,4,2],16); bootp.set(IP,20);
-      bootp.set(data.subarray(28,44),28); bootp.set([99,130,83,99],236); bootp.set(options,240);
-      this.dhcpReplies++;
-      return udpReply(frame,bootp,{source:IP,destination:new Uint8Array([255,255,255,255])});
-    }
-    if (port === 123 && data.length >= 48) {
-      if (!this.ntpEnabled) return null;
-      const ntp = new Uint8Array(48); ntp[0] = 0x24; ntp[1] = 1; ntp[2] = 6; ntp[3] = 0xec;
-      ntp.set([76, 79, 67, 76], 12); ntp.set(data.subarray(40, 48), 24);
-      const stamp = this.now() / 1000 + 2208988800;
-      for (const offset of [16, 32, 40]) { put32(ntp, offset, Math.floor(stamp)); put32(ntp, offset + 4, Math.floor((stamp % 1) * 4294967296)); }
-      this.ntpReplies++; return udpReply(frame, ntp);
-    }
-    if (port === 53 && data.length >= 17 && !(data[2] & 0x80) && u16(data, 4) === 1) {
-      let end = 12;
-      while (end < data.length && data[end] !== 0) {
-        if (data[end] > 63 || end + data[end] >= data.length) return null;
-        end += data[end] + 1;
-      }
-      end += 5;
-      if (end > data.length) return null;
-      const a = u16(data, end - 4) === 1;
-      const dns = new Uint8Array(end + (a ? 16 : 0)); dns.set(data.subarray(0, end));
-      dns[2] = 0x81; dns[3] = 0x80; put16(dns, 6, a ? 1 : 0); put16(dns, 8, 0); put16(dns, 10, 0);
-      if (a) { dns.set([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 60, 0, 4], end); dns.set(IP, end + 12); }
-      this.dnsReplies++; return udpReply(frame, dns);
-    }
-    return null;
-  }
-  pump(emu) {
-    const b = emu.wifi_tx_drain(); let offset = 0;
-    while (offset + 4 <= b.length) {
-      const length = new DataView(b.buffer, b.byteOffset + offset, 4).getUint32(0, true); offset += 4;
-      if (length > b.length - offset) break;
-      const answer = this.reply(b.subarray(offset, offset + length)); if (answer) emu.wifi_rx_push(answer);
-      offset += length;
-    }
-  }
-}
-
-// Decode guest ESP32-S3 LEDC registers and GPIO matrix, rather than Serial text.
-// Register layout: ESP-IDF v5.4 soc/esp32s3/{ledc_reg.h,gpio_reg.h,gpio_sig_map.h}.
-function readServoSignals(emu, pins = [13, 12, 14]) {
-  const registers = emu.read_memory(0x60019000, 0xd4);
-  const v = new DataView(registers.buffer, registers.byteOffset, registers.byteLength);
-  const read = off => off + 4 <= v.byteLength ? v.getUint32(off, true) : 0;
-  const clock = { 1: 80000000, 2: 17500000, 3: 40000000 }[read(0xd0) & 3];
-  return pins.map(pin => {
-    const matrix = emu.read_memory(0x60004000 + 0x554 + pin * 4, 4);
-    const signal = new DataView(matrix.buffer, matrix.byteOffset, 4).getUint32(0, true) & 511;
-    const ch = signal - 73;
-    if (ch < 0 || ch > 7) return { pin, active: false, signal };
-    const config = read(ch * 20), timer = read(0xa0 + (config & 3) * 8);
-    const bits = timer & 15, divider = ((timer >>> 4) & 0x3ffff) / 256;
-    const duty = (read(ch * 20 + 8) & 0x7ffff) / 16;
-    if (!(config & 4) || !bits || !divider || !clock || (timer & (1 << 22))) return { pin, active: false, signal, ch };
-    const hz = clock / divider / 2 ** bits, pulse = duty / 2 ** bits / hz * 1000000;
-    const angle = Math.max(0, Math.min(180, (pulse - 544) * 180 / (2400 - 544)));
-    return { pin, active: pulse >= 400 && pulse <= 2600, ch, hz, pulse, angle, duty, bits };
-  });
-}
-
-let init, WasmEmulator;
-let emu, running = false, loopId = null, last = 0, net = new VirtualNetwork();
-let networkEnabled = true;
-const send = message => postMessage(message);
-function snapshot(force = false) {
-  if (!emu || (!force && performance.now() - last < 100)) return;
-  last = performance.now();
-  send({ type: 'snapshot', pcs: Array.from({ length: emu.num_harts() }, (_, i) => emu.hart_pc(i)), cycles: Number(emu.cycles()), cpuMHz: emu.cycles_per_us(), gpio: Array.from(emu.gpio_state()), servos: readServoSignals(emu), ntp: net.ntpReplies, dns: net.dnsReplies, packets: net.frames });
-}
-function tick() {
-  if (!running || !emu) return;
-  try {
-    const started = performance.now(); let text = '', delay = 0;
-    do {
-      text += emu.run_batch(30000);
-      net.ntpEnabled = networkEnabled; net.pump(emu);
-      if (emu.needs_restart()) { emu.restart(); send({ type: 'uart', text: '\n[固件重启]\n' }); break; }
-      delay = Math.min(20, emu.throttle_delay_ms(performance.now()));
-      if (delay > 0) break;
-    } while (performance.now() - started < 12);
-    if (text) send({ type: 'uart', text });
-    snapshot(); loopId = setTimeout(tick, Math.max(0, delay));
-  } catch (error) { running = false; send({ type: 'error', message: String(error) }); }
-}
-self.onmessage = async ({ data: m }) => {
-  try {
-    if (m.type === 'load') {
-      running = false; clearTimeout(loopId); if (!init) ({ default: init, WasmEmulator } = await import(m.engineUrl)); await init(); emu?.free();
-      emu = new WasmEmulator('esp32s3'); emu.set_wifi_config('Wokwi-GUEST', '');
-      emu.load_default_rom(); emu.set_boot_from_rom(true); emu.load_firmware(new Uint8Array(m.firmware));
-      if (m.elf) emu.load_app_elf(new Uint8Array(m.elf));
-      emu.set_wifi_auth('Wokwi-GUEST', '', 'open', 'both');
-      net = new VirtualNetwork();
-      if (!emu.is_xtensa()) throw new Error('固件未初始化 ESP32-S3 Xtensa 内核');
-      send({ type: 'loaded', cores: emu.num_harts(), cpuMHz: emu.cycles_per_us() }); snapshot(true);
-    } else if (m.type === 'start' && emu && !running) { running = true; tick(); }
-    else if (m.type === 'pause') { running = false; clearTimeout(loopId); snapshot(true); }
-    else if (m.type === 'network') networkEnabled = !!m.enabled;
-    else if (m.type === 'uart' && emu) emu.uart_input(new TextEncoder().encode(m.text));
-  } catch (error) { running = false; send({ type: 'error', message: String(error) }); }
+.top{min-height:64px}.projectbar button[aria-pressed=true]{background:#203f2b;color:#a4e8bb;border-color:#203f2b}.layout{min-height:730px}.editor textarea#source{width:100%;flex:1;min-height:260px;resize:none;border:0;padding:17px 20px;background:#142119;color:#c5e0cd;font:12px/1.75 Consolas,'Microsoft YaHei',monospace;white-space:pre;tab-size:2;outline-offset:-3px}.source-note{max-height:84px;overflow:auto}.source-note a{color:#a4e8bb}.serial{height:230px;flex:none}.serial-head{display:flex;align-items:center;padding:9px 15px;border-bottom:1px solid #263c2b;font-size:12px;color:#bfd5c5}.serial-head span{margin-left:auto;color:#719680;font-size:11px}.serial-head button{padding:2px 5px;font-size:11px;background:transparent;color:#8aac94;border:0;margin-left:10px}.inspector{width:215px}.inspector .control{display:flex;flex-direction:column;gap:7px;margin-bottom:15px}.control-heading{display:flex;justify-content:space-between;gap:7px;font-size:11px;color:#7b9581}.control-heading output{font:11px Consolas,monospace;color:#35543d}.inspector input[type=range]{width:100%;border:0;padding:0;accent-color:#439959;background:transparent;cursor:pointer}.ends{display:flex;justify-content:space-between;font-size:10px;color:#9aaa99}.presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:16px}.presets button{font-size:10px;padding:5px 7px}.inspector .check{flex-direction:row;gap:6px;align-items:center}.inspector .check input{width:auto;accent-color:#439959}.hint-note{font-size:11px;color:#8a9a86;line-height:1.8;margin-top:14px}.canvas-title strong{font-weight:500}#visual{position:absolute;inset:0}#visual svg{width:100%;height:100%}.readings{max-height:235px;min-height:130px}.reading .text-value{font:14px/1.5 'Microsoft YaHei',sans-serif;overflow-wrap:anywhere}.readings-head small{color:#839b86;font-size:11px}.bottom table{font-size:11px;border-collapse:collapse;width:100%;margin-top:8px}.bottom td,.bottom th{text-align:left;padding:4px 10px 4px 0;border-bottom:1px solid #e3eadd}.bottom th{font-weight:400;color:#91a28d}.bottom details{max-width:100%;flex:1}.bottom details p{font-size:11px;line-height:1.8}.bottom>span{white-space:nowrap}.engine-note{font-size:10px;color:#80977f;margin-top:8px;line-height:1.8}.filebar select{min-width:0}.filebar button{white-space:nowrap}.projectbar{gap:7px}.project-name{color:#526f5a}#status{min-width:50px}.toolbar #reset{min-width:58px}#elapsed{min-width:75px}.visual-pin{fill:#cbb36c;stroke:#8c793e;stroke-width:1}.connection{fill:none;stroke-width:2.6;stroke-linejoin:round;opacity:.85}
+@media(max-width:1250px){.inspector{width:180px}}@media(max-width:950px){.inspector{width:160px}.cards{grid-template-columns:repeat(auto-fit,minmax(125px,1fr))}}@media(max-width:760px){.top .project-name{margin-left:auto}.links{display:none}.projectbar button{flex:1 1 28%;padding:8px}.layout{height:auto;min-height:0}.editor{height:620px}.workspace{height:490px}.inspector{width:155px}.readings{max-height:310px}.source-note{max-height:95px}.bottom{flex-wrap:wrap}.bottom>span{display:block}.canvas-title{font-size:10px;max-width:70%}.hint{font-size:10px;max-width:90%}.toolbar{padding:9px 12px}.reading strong{font-size:19px}}
+</style></head><body>
+<header class="top"><a class="brand" href="./"><span class="logo">S3</span>S3 LAB</a><span class="badge">ESP32 · 基础传感器实验</span><span class="project-name">传感器数据获取</span><div class="links"><span class="badge">实验现象演示</span></div></header>
+<nav class="projectbar" aria-label="选择实验"><button data-experiment="mpu6050" aria-pressed="true">MPU6050</button><button data-experiment="fsr402" aria-pressed="false">FSR402</button><button data-experiment="hx711" aria-pressed="false">HX711</button><button data-experiment="hcsr04" aria-pressed="false">HC-SR04</button><button data-experiment="combined" aria-pressed="false">综合采集</button></nav>
+<main class="layout"><section class="editor" aria-label="实验代码与串口"><div class="filebar"><select id="file-select" aria-label="查看实验文件"><option value="code">sketch.ino</option><option value="diagram">diagram.json</option><option value="libraries">libraries.txt</option></select><button id="download">下载文件</button></div><div class="source-tools"><span>实验源码 · ESP32</span><span>查看 / 下载</span></div><textarea id="source" aria-label="Arduino 实验源代码" readonly spellcheck="false" wrap="off"></textarea><div id="source-note" class="source-note"></div><section class="serial" aria-label="串口监视器"><div class="serial-head">›_ 串口监视器<span>UART0 · 115200</span><button id="clear">清空</button></div><pre id="console" role="log" aria-label="模拟串口输出">点击「开始实验」读取数据。</pre></section></section>
+<section class="sim" aria-label="电路和传感器状态"><div class="toolbar"><button id="run">开始实验</button><button id="reset">重置</button><span id="status" role="status">未开始</span><span id="elapsed">00:00.000</span></div><div class="workspace"><div class="canvas"><div class="canvas-title">电路画布 <span><strong id="title"></strong></span></div><div id="visual" role="img" aria-label="ESP32 实验接线示意"></div><div class="hint">固定实验接线 · 调整右侧输入观察变化</div></div><aside class="inspector" aria-label="实验输入"><h2>传感器输入</h2><p id="description"></p><div id="controls"></div><div id="presets" class="presets"></div><p id="input-note" class="hint-note"></p></aside></div><div class="readings"><div class="readings-head"><strong>传感器状态</strong><small id="sampling-note">每 500 ms 读取一次</small></div><div id="readings" class="cards"></div><div class="engine-note">参数驱动的实验现象演示 · 基础 Arduino 代码可用于 ESP32 / Wokwi</div></div><div class="bottom"><details><summary>接线列表</summary><table><thead><tr><th>传感器引脚 / 接点</th><th>ESP32 接线</th></tr></thead><tbody id="wiring"></tbody></table><p id="wiring-note"></p></details><span>ESP32 · 115200 baud</span></div></section></main>
+<script>const projects = {"mpu6050": {"code": "#include <Wire.h>\n#include <MPU6050.h>\n\nMPU6050 mpu;\n\nvoid setup() {\n  Serial.begin(115200);\n  Wire.begin();  // ESP32: SDA=21, SCL=22\n  Serial.println(\"初始化MPU6050...\");\n  mpu.initialize();\n  if (mpu.testConnection()) {\n    Serial.println(\"MPU6050 连接成功\");\n  } else {\n    Serial.println(\"MPU6050 连接失败，请检查接线或I2C地址!\");\n    while (1) { delay(1000); }\n  }\n  mpu.setFullScaleGyroRange(MPU6050_GYRO_FS_2000);\n  mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_2);\n  Serial.println(\"MPU6050 初始化成功\");\n}\n\nvoid loop() {\n  int16_t ax, ay, az;\n  int16_t gx, gy, gz;\n  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);\n  float accelX = ax / 16384.0;\n  float accelY = ay / 16384.0;\n  float accelZ = az / 16384.0;\n  float gyroX = gx / 16.4;\n  float gyroY = gy / 16.4;\n  float gyroZ = gz / 16.4;\n  Serial.printf(\"加速度 X:%.2f Y:%.2f Z:%.2f g\\n\", accelX, accelY, accelZ);\n  Serial.printf(\"陀螺仪 X:%.2f Y:%.2f Z:%.2f °/s\\n\", gyroX, gyroY, gyroZ);\n  Serial.println(\"---\");\n  delay(500);\n}\n", "diagram": "{\n  \"version\": 1,\n  \"author\": \"Sensor Lab\",\n  \"editor\": \"wokwi\",\n  \"parts\": [\n    {\n      \"type\": \"board-esp32-devkit-c-v4\",\n      \"id\": \"esp\",\n      \"top\": -57.6,\n      \"left\": -62.36,\n      \"attrs\": {}\n    },\n    {\n      \"type\": \"wokwi-mpu6050\",\n      \"id\": \"imu1\",\n      \"top\": 32.62,\n      \"left\": 127.12,\n      \"attrs\": {}\n    }\n  ],\n  \"connections\": [\n    [\n      \"esp:TX\",\n      \"$serialMonitor:RX\",\n      \"\",\n      []\n    ],\n    [\n      \"esp:RX\",\n      \"$serialMonitor:TX\",\n      \"\",\n      []\n    ],\n    [\n      \"imu1:VCC\",\n      \"esp:3V3\",\n      \"red\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"imu1:GND\",\n      \"esp:GND.2\",\n      \"black\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"imu1:SCL\",\n      \"esp:22\",\n      \"green\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"imu1:SDA\",\n      \"esp:21\",\n      \"green\",\n      [\n        \"v0\"\n      ]\n    ]\n  ],\n  \"dependencies\": {}\n}\n", "libraries": "MPU6050\n"}, "fsr402": {"code": "// 实物：3V3 → FSR402 → GPIO34 → 10kΩ → GND。\n// Wokwi：电位器 SIG 接 GPIO34，代替变化的模拟输入。\nconst int FSR_PIN = 34;\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(FSR_PIN, INPUT);\n  Serial.println(\"FSR402压力传感器测试开始\");\n}\n\nvoid loop() {\n  int rawValue = analogRead(FSR_PIN);\n  float voltage = rawValue * (3.3 / 4095.0);\n  Serial.printf(\"ADC值: %d | 电压: %.2fV | 压力: \", rawValue, voltage);\n  if (rawValue < 100) Serial.println(\"无压力\");\n  else if (rawValue < 500) Serial.println(\"轻压\");\n  else if (rawValue < 800) Serial.println(\"中压\");\n  else Serial.println(\"重压\");\n  delay(200);\n}\n", "diagram": "{\n  \"version\": 1,\n  \"author\": \"Sensor Lab\",\n  \"editor\": \"wokwi\",\n  \"parts\": [\n    {\n      \"type\": \"board-esp32-devkit-c-v4\",\n      \"id\": \"esp\",\n      \"top\": -19.2,\n      \"left\": -302.36,\n      \"attrs\": {}\n    },\n    {\n      \"type\": \"wokwi-potentiometer\",\n      \"id\": \"pot1\",\n      \"top\": -39.7,\n      \"left\": -9.8,\n      \"attrs\": {}\n    }\n  ],\n  \"connections\": [\n    [\n      \"esp:TX\",\n      \"$serialMonitor:RX\",\n      \"\",\n      []\n    ],\n    [\n      \"esp:RX\",\n      \"$serialMonitor:TX\",\n      \"\",\n      []\n    ],\n    [\n      \"pot1:VCC\",\n      \"esp:3V3\",\n      \"red\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"pot1:GND\",\n      \"esp:GND.2\",\n      \"black\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"pot1:SIG\",\n      \"esp:34\",\n      \"green\",\n      [\n        \"v0\"\n      ]\n    ]\n  ],\n  \"dependencies\": {}\n}\n", "libraries": ""}, "hx711": {"code": "#include <HX711.h>\n\nHX711 scale;\nconst int DT_PIN = 32;\nconst int SCK_PIN = 33;\n// 教程的 2280 是示例系数；Wokwi 5kg 模型使用 420 原始值/kg。\n// 使用实物时需要按已知砝码重新标定。\nconst float CALIBRATION_FACTOR = 420.0;\n\nvoid setup() {\n  Serial.begin(115200);\n  scale.begin(DT_PIN, SCK_PIN);\n  scale.set_scale(CALIBRATION_FACTOR);\n  if (scale.wait_ready_timeout(2000)) {\n    scale.tare();  // 开始时保持空载\n    Serial.println(\"HX711 去皮完成\");\n  } else {\n    Serial.println(\"HX711 未就绪，请检查接线\");\n  }\n}\n\nvoid loop() {\n  if (scale.is_ready()) {\n    float weight = scale.get_units(5);\n    Serial.printf(\"重量: %.2f kg\\n\", weight);\n  } else {\n    Serial.println(\"HX711 未就绪，请检查接线\");\n  }\n  delay(500);\n}\n", "diagram": "{\n  \"version\": 1,\n  \"author\": \"Sensor Lab\",\n  \"editor\": \"wokwi\",\n  \"parts\": [\n    {\n      \"type\": \"board-esp32-devkit-c-v4\",\n      \"id\": \"esp\",\n      \"top\": -57.6,\n      \"left\": -62.36,\n      \"attrs\": {}\n    },\n    {\n      \"type\": \"wokwi-hx711\",\n      \"id\": \"scale1\",\n      \"top\": 32.62,\n      \"left\": 127.12,\n      \"attrs\": {\n        \"type\": \"5kg\"\n      }\n    }\n  ],\n  \"connections\": [\n    [\n      \"esp:TX\",\n      \"$serialMonitor:RX\",\n      \"\",\n      []\n    ],\n    [\n      \"esp:RX\",\n      \"$serialMonitor:TX\",\n      \"\",\n      []\n    ],\n    [\n      \"scale1:VCC\",\n      \"esp:5V\",\n      \"red\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"scale1:GND\",\n      \"esp:GND.2\",\n      \"black\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"scale1:DT\",\n      \"esp:32\",\n      \"green\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"scale1:SCK\",\n      \"esp:33\",\n      \"green\",\n      [\n        \"v0\"\n      ]\n    ]\n  ],\n  \"dependencies\": {}\n}\n", "libraries": "HX711\n"}, "hcsr04": {"code": "const int TRIG_PIN = 26;\nconst int ECHO_PIN = 27;\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(TRIG_PIN, OUTPUT);\n  pinMode(ECHO_PIN, INPUT);\n  digitalWrite(TRIG_PIN, LOW);\n  Serial.println(\"HC-SR04超声波传感器测试\");\n}\n\nvoid loop() {\n  digitalWrite(TRIG_PIN, LOW);\n  delayMicroseconds(2);\n  digitalWrite(TRIG_PIN, HIGH);\n  delayMicroseconds(10);\n  digitalWrite(TRIG_PIN, LOW);\n  unsigned long duration = pulseIn(ECHO_PIN, HIGH, 30000);\n  if (duration == 0) {\n    Serial.println(\"HC-SR04 无回波\");\n  } else {\n    long distance = duration * 0.034 / 2;\n    Serial.printf(\"距离: %ld cm\", distance);\n    if (distance < 5) Serial.println(\" - 非常近!\");\n    else if (distance < 20) Serial.println(\" - 近距离\");\n    else if (distance < 100) Serial.println(\" - 中距离\");\n    else if (distance < 400) Serial.println(\" - 远距离\");\n    else Serial.println(\" - 超出测量范围\");\n  }\n  delay(500);\n}\n", "diagram": "{\n  \"version\": 1,\n  \"author\": \"Sensor Lab\",\n  \"editor\": \"wokwi\",\n  \"parts\": [\n    {\n      \"type\": \"board-esp32-devkit-c-v4\",\n      \"id\": \"esp\",\n      \"top\": 0,\n      \"left\": -139.16,\n      \"attrs\": {}\n    },\n    {\n      \"type\": \"wokwi-hc-sr04\",\n      \"id\": \"ultrasonic1\",\n      \"top\": 30.3,\n      \"left\": 139.9,\n      \"attrs\": {\n        \"distance\": \"100\"\n      }\n    }\n  ],\n  \"connections\": [\n    [\n      \"esp:TX\",\n      \"$serialMonitor:RX\",\n      \"\",\n      []\n    ],\n    [\n      \"esp:RX\",\n      \"$serialMonitor:TX\",\n      \"\",\n      []\n    ],\n    [\n      \"ultrasonic1:VCC\",\n      \"esp:5V\",\n      \"red\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"ultrasonic1:GND\",\n      \"esp:GND.2\",\n      \"black\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"ultrasonic1:TRIG\",\n      \"esp:26\",\n      \"green\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"ultrasonic1:ECHO\",\n      \"esp:27\",\n      \"green\",\n      [\n        \"v0\"\n      ]\n    ]\n  ],\n  \"dependencies\": {}\n}\n", "libraries": ""}, "combined": {"code": "// 参考飞书多传感器实验，仅保留四种传感器的数据采集。\n#include <Wire.h>\n#include <MPU6050.h>\n#include <HX711.h>\n\nMPU6050 mpu;\nHX711 scale;\nconst int FSR_PIN = 34;\nconst int TRIG_PIN = 26;\nconst int ECHO_PIN = 27;\nconst int DT_PIN = 32;\nconst int SCK_PIN = 33;\n// Wokwi 5kg 称重模型为 420 原始值/kg。实物需自行标定。\nconst float CALIBRATION_FACTOR = 420.0;\n\nvoid setup() {\n  Serial.begin(115200);\n  Wire.begin();\n  mpu.initialize();\n  if (!mpu.testConnection()) {\n    Serial.println(\"MPU6050 连接失败，请检查接线\");\n    while (1) { delay(1000); }\n  }\n  mpu.setFullScaleGyroRange(MPU6050_GYRO_FS_2000);\n  mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_2);\n  pinMode(FSR_PIN, INPUT);\n  scale.begin(DT_PIN, SCK_PIN);\n  scale.set_scale(CALIBRATION_FACTOR);\n  if (scale.wait_ready_timeout(2000)) {\n    scale.tare();  // 开始时保持空载\n    Serial.println(\"HX711 去皮完成\");\n  } else {\n    Serial.println(\"HX711 未就绪，请检查接线\");\n  }\n  pinMode(TRIG_PIN, OUTPUT);\n  pinMode(ECHO_PIN, INPUT);\n  digitalWrite(TRIG_PIN, LOW);\n  Serial.println(\"所有传感器初始化完成\");\n}\n\nvoid loop() {\n  int16_t ax, ay, az, gx, gy, gz;\n  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);\n  Serial.printf(\"加速度 X:%.2fg Y:%.2fg Z:%.2fg | \", ax/16384.0, ay/16384.0, az/16384.0);\n  Serial.printf(\"陀螺仪 X:%.2f°/s Y:%.2f°/s Z:%.2f°/s\\n\", gx/16.4, gy/16.4, gz/16.4);\n\n  int rawValue = analogRead(FSR_PIN);\n  float voltage = rawValue * (3.3 / 4095.0);\n  Serial.printf(\"FSR ADC值: %d | 电压: %.2fV | 压力: \", rawValue, voltage);\n  if (rawValue < 100) Serial.println(\"无压力\");\n  else if (rawValue < 500) Serial.println(\"轻压\");\n  else if (rawValue < 800) Serial.println(\"中压\");\n  else Serial.println(\"重压\");\n\n  if (scale.is_ready()) {\n    Serial.printf(\"重量: %.2f kg\\n\", scale.get_units(5));\n  } else {\n    Serial.println(\"HX711 未就绪，请检查接线\");\n  }\n\n  digitalWrite(TRIG_PIN, LOW);\n  delayMicroseconds(2);\n  digitalWrite(TRIG_PIN, HIGH);\n  delayMicroseconds(10);\n  digitalWrite(TRIG_PIN, LOW);\n  unsigned long duration = pulseIn(ECHO_PIN, HIGH, 30000);\n  if (duration == 0) {\n    Serial.println(\"HC-SR04 无回波\");\n  } else {\n    long distance = duration * 0.034 / 2;\n    Serial.printf(\"距离: %ld cm\", distance);\n    if (distance < 10) Serial.println(\" - 很近!\");\n    else if (distance < 50) Serial.println(\" - 近距离\");\n    else if (distance < 200) Serial.println(\" - 中距离\");\n    else Serial.println(\" - 远距离\");\n  }\n  Serial.println(\"----------\");\n  delay(500);\n}\n", "diagram": "{\n  \"version\": 1,\n  \"author\": \"Sensor Lab\",\n  \"editor\": \"wokwi\",\n  \"parts\": [\n    {\n      \"type\": \"board-esp32-devkit-c-v4\",\n      \"id\": \"esp\",\n      \"top\": 0,\n      \"left\": 0,\n      \"attrs\": {}\n    },\n    {\n      \"type\": \"wokwi-mpu6050\",\n      \"id\": \"imu1\",\n      \"top\": 0,\n      \"left\": 260,\n      \"attrs\": {}\n    },\n    {\n      \"type\": \"wokwi-potentiometer\",\n      \"id\": \"pot1\",\n      \"top\": 110,\n      \"left\": 260,\n      \"attrs\": {}\n    },\n    {\n      \"type\": \"wokwi-hx711\",\n      \"id\": \"scale1\",\n      \"top\": 220,\n      \"left\": 260,\n      \"attrs\": {\n        \"type\": \"5kg\"\n      }\n    },\n    {\n      \"type\": \"wokwi-hc-sr04\",\n      \"id\": \"ultrasonic1\",\n      \"top\": 330,\n      \"left\": 260,\n      \"attrs\": {\n        \"distance\": \"100\"\n      }\n    }\n  ],\n  \"connections\": [\n    [\n      \"esp:TX\",\n      \"$serialMonitor:RX\",\n      \"\",\n      []\n    ],\n    [\n      \"esp:RX\",\n      \"$serialMonitor:TX\",\n      \"\",\n      []\n    ],\n    [\n      \"imu1:VCC\",\n      \"esp:3V3\",\n      \"red\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"imu1:GND\",\n      \"esp:GND.2\",\n      \"black\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"imu1:SCL\",\n      \"esp:22\",\n      \"green\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"imu1:SDA\",\n      \"esp:21\",\n      \"green\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"pot1:VCC\",\n      \"esp:3V3\",\n      \"red\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"pot1:GND\",\n      \"esp:GND.2\",\n      \"black\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"pot1:SIG\",\n      \"esp:34\",\n      \"green\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"scale1:VCC\",\n      \"esp:5V\",\n      \"red\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"scale1:GND\",\n      \"esp:GND.2\",\n      \"black\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"scale1:DT\",\n      \"esp:32\",\n      \"green\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"scale1:SCK\",\n      \"esp:33\",\n      \"green\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"ultrasonic1:VCC\",\n      \"esp:5V\",\n      \"red\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"ultrasonic1:GND\",\n      \"esp:GND.2\",\n      \"black\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"ultrasonic1:TRIG\",\n      \"esp:26\",\n      \"green\",\n      [\n        \"v0\"\n      ]\n    ],\n    [\n      \"ultrasonic1:ECHO\",\n      \"esp:27\",\n      \"green\",\n      [\n        \"v0\"\n      ]\n    ]\n  ],\n  \"dependencies\": {}\n}\n", "libraries": "MPU6050\nHX711\n"}};
+// Parameters demonstrate readings; this module does not execute Arduino code.
+const defaults = {
+  mpu6050: {ax:0, ay:0, az:1, gx:0, gy:0, gz:0},
+  fsr402: {adc:0}, hx711: {load:0}, hcsr04: {distance:100, echo:true},
+  combined: {ax:0, ay:0, az:1, gx:0, gy:0, gz:0, adc:0, load:0, distance:100, echo:true}
 };
-self.onunhandledrejection = event => send({ type: 'error', message: String(event.reason) });</script>
-<script type="module">const $ = id => document.getElementById(id);
-const source = $('source-code').textContent;
-$('code').value = source;
-const svg = $('circuit');
-const servoDefs = [{ id: 'hour', name: '时针', pin: 13, color: '#6da8d8' }, { id: 'minute', name: '分针', pin: 12, color: '#70b186' }, { id: 'second', name: '秒针', pin: 14, color: '#dfad54' }];
-const leftPins = ['3V3', '3V3', 'RST', '4', '5', '6', '7', '15', '16', '17', '18', '8', '3', '46', '9', '10', '11', '12', '13', '14', '5V', 'GND'];
-const rightPins = ['GND', 'TX', 'RX', '1', '2', '42', '41', '40', '39', '38', '37', '36', '35', '0', '45', '48', '47', '21', '20', '19', 'GND', 'GND'];
-const parts = { board: { x: 225, y: 75 }, hour: { x: 620, y: 130 }, minute: { x: 620, y: 275 }, second: { x: 620, y: 420 } };
-let wires = servoDefs.flatMap(s => [
-  { a: `board:L${leftPins.indexOf(String(s.pin))}`, b: `${s.id}:PWM`, color: s.color },
-  { a: 'board:L20', b: `${s.id}:V+`, color: '#cf7a75' },
-  { a: 'board:L21', b: `${s.id}:GND`, color: '#53675b' },
-]);
-let worker, firmware, appElf, running = false, busy = false, pendingPin = null, signals = [], loaded = false, serialTail = '', zoom = 1;
-let startRequested = false, sourceDirty = false;
-const esc = x => String(x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-function endpoint(id) {
-  const [part, pin] = id.split(':'); const p = parts[part]; if (!p) return null;
-  if (part === 'board') { const i = +pin.slice(1); return { x: p.x + (pin[0] === 'L' ? 0 : 155), y: p.y + i * 18 }; }
-  return { x: p.x - 47, y: p.y + ({ PWM: 30, 'V+': 47, GND: 64 }[pin]) };
-}
-function pin(id, x, y, name, anchor = 'end') {
-  return `<g class="pin ${pendingPin === id ? 'active' : ''}" data-pin="${id}" role="button" tabindex="0" aria-label="${id}"><title>${id}</title><circle cx="${x}" cy="${y}" r="5" fill="#d0b671" stroke="#755f32"/><circle cx="${x}" cy="${y}" r="12" fill="transparent"/><text x="${x + (anchor === 'end' ? -12 : 12)}" y="${y + 4}" text-anchor="${anchor}" font-size="11" fill="#839985">${name}</text></g>`;
-}
-function connected(start) {
-  const set = new Set([start]), queue = [start];
-  while (queue.length) { const p = queue.pop(); for (const w of wires) { const n = w.a === p ? w.b : w.b === p ? w.a : null; if (n && !set.has(n)) { set.add(n); queue.push(n); } } }
-  return set;
-}
-function getPads(net) { return [...net].filter(n => n.startsWith('board:')).map(n => { const pin = n.split(':')[1]; return (pin[0] === 'L' ? leftPins : rightPins)[+pin.slice(1)]; }); }
-function servoReading(id) {
-  const power = getPads(connected(`${id}:V+`)), ground = getPads(connected(`${id}:GND`));
-  const pads = getPads(connected(`${id}:PWM`));
-  if (!power.includes('5V') || !ground.includes('GND')) return { active: false, reason: '电源或地未连接' };
-  const match = signals.filter(s => s.active && pads.includes(String(s.pin)));
-  if (match.length !== 1) return { active: false, reason: match.length > 1 ? '多个输出冲突' : '等待 PWM 信号' };
-  return match[0];
-}
-function renderParts() {
-  const b = parts.board;
-  let markup = `<g transform="translate(${b.x} ${b.y})"><g class="drag-part" data-part="board"><rect x="-10" y="-17" width="175" height="431" rx="11" fill="#233e2e" stroke="#152d1c" stroke-width="2"/><rect x="20" y="-7" width="115" height="131" rx="4" fill="#c1c9c1" stroke="#778b7a"/><rect x="20" y="-7" width="115" height="35" fill="#414e43"/><path d="M35 19V2h14v17h14V2h14v17h14V2h18v17" fill="none" stroke="#c2b773" stroke-width="3"/><text x="77" y="66" text-anchor="middle" font-size="14" fill="#5a6c5e">ESP32-S3</text><text x="77" y="88" text-anchor="middle" font-size="11" fill="#6f8171">WROOM-1</text><text x="77" y="106" text-anchor="middle" font-size="9" fill="#6f8171">Xtensa LX7</text><rect x="59" y="176" width="37" height="47" fill="#17261b" stroke="#61805c"/><text x="77" y="252" text-anchor="middle" font-size="11" fill="#99b19a">DevKitC-1</text><text x="77" y="270" text-anchor="middle" font-size="10" fill="#88a28b">v1.1</text><circle cx="121" cy="316" r="4" fill="${running ? '#a4e8bb' : '#69836c'}"/><rect x="24" y="352" width="45" height="43" rx="4" fill="#88988b"/><rect x="88" y="352" width="45" height="43" rx="4" fill="#88988b"/><rect x="31" y="372" width="31" height="20" rx="3" fill="#29382d"/><rect x="95" y="372" width="31" height="20" rx="3" fill="#29382d"/><text x="47" y="408" text-anchor="middle" fill="#8ba68e" font-size="9">UART</text><text x="110" y="408" text-anchor="middle" fill="#8ba68e" font-size="9">USB</text></g>${leftPins.map((n, i) => pin(`board:L${i}`, 0, i * 18, n, 'start')).join('')}${rightPins.map((n, i) => pin(`board:R${i}`, 155, i * 18, n)).join('')}</g>`;
-  for (const s of servoDefs) {
-    const p = parts[s.id], r = servoReading(s.id), angle = r.active ? r.angle : 90;
-    markup += `<g transform="translate(${p.x} ${p.y})"><g class="drag-part" data-part="${s.id}"><text x="47" y="-18" text-anchor="middle" font-size="13" fill="#627b68">${s.name}舵机</text><rect x="-35" y="-8" width="167" height="93" rx="6" fill="#b1c6d6" stroke="#557d9c" stroke-width="2"/><rect x="-12" y="-12" width="118" height="101" rx="9" fill="#729fc0" stroke="#426c8c"/><path d="M0 10h94M0 74h94" stroke="#aac9dc" stroke-width="2"/><circle cx="-24" cy="8" r="4" fill="#f3f6f0"/><circle cx="120" cy="8" r="4" fill="#f3f6f0"/><circle cx="47" cy="36" r="27" fill="#c5dce7" stroke="#496e86" stroke-width="2"/><g transform="translate(47 36) rotate(${angle - 90})"><rect x="-6" y="-38" width="12" height="77" rx="5" fill="#edf0e7" stroke="#7d928a"/><circle cy="-27" r="2.3" fill="#82998b"/><circle cy="27" r="2.3" fill="#82998b"/><circle r="7" fill="#d5ddcd" stroke="#6a8675"/></g><text x="47" y="109" text-anchor="middle" font-size="12" fill="${s.color}">${r.active ? r.angle.toFixed(1) + '°' : '等待信号'}</text></g>${pin(`${s.id}:PWM`, -47, 30, 'PWM')}${pin(`${s.id}:V+`, -47, 47, '5V')}${pin(`${s.id}:GND`, -47, 64, 'GND')}</g>`;
+function measure(id, input, context = {}) {
+  if (id === 'combined') {
+    const mpu = measure('mpu6050',input), fsr = measure('fsr402',input);
+    const hx = measure('hx711',input,context), hc = measure('hcsr04',input,{combined:true});
+    const values = mpu.values;
+    return {mpu,fsr,hx,hc,lines:[
+      `加速度 X:${values[0].toFixed(2)}g Y:${values[1].toFixed(2)}g Z:${values[2].toFixed(2)}g | 陀螺仪 X:${values[3].toFixed(2)}°/s Y:${values[4].toFixed(2)}°/s Z:${values[5].toFixed(2)}°/s`,
+      'FSR ' + fsr.lines[0], ...hx.lines, ...hc.lines, '----------']};
   }
-  $('part-layer').innerHTML = markup;
+  if (id === 'mpu6050') {
+    const raw = ['ax','ay','az','gx','gy','gz'].map((key, i) =>
+      Math.max(-32768, Math.min(32767, Math.round(input[key] * (i < 3 ? 16384 : 16.4)))));
+    const values = raw.map((value, i) => value / (i < 3 ? 16384 : 16.4));
+    return {raw, values, lines:[
+      `加速度 X:${values[0].toFixed(2)} Y:${values[1].toFixed(2)} Z:${values[2].toFixed(2)} g`,
+      `陀螺仪 X:${values[3].toFixed(2)} Y:${values[4].toFixed(2)} Z:${values[5].toFixed(2)} °/s`, '---']};
+  }
+  if (id === 'fsr402') {
+    const adc = Math.max(0,Math.min(4095,Math.round(input.adc)));
+    const voltage = adc * (3.3 / 4095);
+    const pressure = adc < 100 ? '无压力' : adc < 500 ? '轻压' : adc < 800 ? '中压' : '重压';
+    return {adc, voltage, pressure, lines:[`ADC值: ${adc} | 电压: ${voltage.toFixed(2)}V | 压力: ${pressure}`]};
+  }
+  if (id === 'hx711') {
+    // Wokwi 5kg model: 0–5kg corresponds to raw readings 0–2100.
+    const raw = Math.round(input.load * 420);
+    const weight = (raw - (context.tareRaw || 0)) / 420;
+    return {raw, weight, lines:[`重量: ${weight.toFixed(2)} kg`]};
+  }
+  if (id === 'hcsr04') {
+    // Ideal 340m/s echo timing. The reference sketch truncates distance to cm.
+    const pulse = input.echo ? Math.ceil(input.distance / .017) : 0;
+    const distance = pulse ? Math.trunc(pulse * .034 / 2) : null;
+    const label = distance === null ? '无回波' : context.combined
+      ? distance < 10 ? '很近!' : distance < 50 ? '近距离' : distance < 200 ? '中距离' : '远距离'
+      : distance < 5 ? '非常近!' : distance < 20 ? '近距离' : distance < 100 ? '中距离' : distance < 400 ? '远距离' : '超出测量范围';
+    return {pulse, distance, label, lines:[pulse ? `距离: ${distance} cm - ${label}` : 'HC-SR04 无回波']};
+  }
+  throw new Error('Unknown experiment: ' + id);
 }
-function renderWires() {
-  $('wire-layer').innerHTML = wires.map((w, i) => { const a = endpoint(w.a), b = endpoint(w.b); if (!a || !b) return ''; const x = Math.min(a.x, b.x) - 24 - (i % 3) * 11; return `<path class="wire" data-wire="${i}" d="M${a.x} ${a.y} H${x} V${b.y} H${b.x}" fill="none" stroke="${w.color}" stroke-width="2.4" stroke-linejoin="round"><title>${w.a} — ${w.b}</title></path>`; }).join('');
+
+const $ = id => document.getElementById(id);
+const specs = {
+  mpu6050:{name:'MPU6050',title:'MPU6050 的数据获取',description:'观察三轴加速度和角速度的变化。',
+    note:'平放静止时，Z 轴约为 1 g，角速度约为 0。角速度表示转动速度。',
+    wiring:[['VCC','3V3'],['GND','GND'],['SCL','GPIO22'],['SDA','GPIO21']],
+    wiringNote:'使用你提供的 ESP32 接线，I2C 地址为 0x68。',
+    sourceNote:'依赖 Electronic Cats 的 MPU6050 库；量程 ±2 g、±2000 °/s。',
+    url:'https://wcn5nr4htkrb.feishu.cn/wiki/OW9fwyuZliZkxBkVasNcvsFhneG',
+    interval:500,
+    controls:[['ax','加速度 X',-2,2,.01,'g'],['ay','加速度 Y',-2,2,.01,'g'],['az','加速度 Z',-2,2,.01,'g'],['gx','角速度 X',-2000,2000,1,'°/s'],['gy','角速度 Y',-2000,2000,1,'°/s'],['gz','角速度 Z',-2000,2000,1,'°/s']],
+    presets:[['平放静止',{ax:0,ay:0,az:1,gx:0,gy:0,gz:0}],['侧放静止',{ax:1,ay:0,az:0,gx:0,gy:0,gz:0}],['绕 Z 轴转动',{ax:0,ay:0,az:1,gx:0,gy:0,gz:90}]]},
+  fsr402:{name:'FSR402',title:'FSR402 的数值获取',description:'按压与松开，观察 ADC 读数和电压变化。',
+    note:'按教程用电位器替代 FSR402。ADC <100：无压力；<500：轻压；<800：中压；其余为重压。',
+    wiring:[['电位器 VCC','3V3'],['电位器 GND','GND'],['电位器 SIG','GPIO34']],
+    wiringNote:'参考实验使用电位器模拟压力变化。实物 FSR402 接线：3V3→FSR402→GPIO34→10kΩ→GND。',
+    sourceNote:'无额外库。电压 = ADC × 3.3 / 4095；压力等级是教程示意阈值。',
+    url:'https://wcn5nr4htkrb.feishu.cn/wiki/RgtLwa8ZpiRUs8keX8dc5NnBnfc',
+    interval:200,
+    controls:[['adc','电位器输入 / ADC',0,4095,1,'']],
+    presets:[['无压力',{adc:0}],['轻压',{adc:300}],['中压',{adc:650}],['重压',{adc:1000}]]},
+  hx711:{name:'HX711',title:'HX711 的数据获取',description:'增加或移除负载，观察去皮后的重量变化。',
+    note:'先空载开始，再放上负载。第一次开始时去皮；后续重量相对于启动时的负载。',
+    wiring:[['VCC','5V（Wokwi）'],['GND','GND'],['DT','GPIO32'],['SCK','GPIO33']],
+    wiringNote:'Wokwi 元件自带称重传感器。实物还需接称重桥；与 ESP32 连接的数字逻辑电平需为 3.3V。',
+    sourceNote:'参考教程 set_scale()、tare() 和 get_units(5)。Wokwi 5kg 模型用系数420；教程2280为示例，实物需标定。',
+    url:'https://wcn5nr4htkrb.feishu.cn/wiki/OW9fwyuZliZkxBkVasNcvsFhneG',
+    interval:500,
+    controls:[['load','模拟负载',0,5,.01,'kg']],
+    presets:[['空载',{load:0}],['放上 1 kg',{load:1}],['放上 3 kg',{load:3}]]},
+  hcsr04:{name:'HC-SR04',title:'HC-SR04 的距离获取',description:'改变目标距离，观察测距结果。',
+    note:'按教程显示整数距离及远近提示；勾选“无回波”观察超时。超过400 cm的输入仅用于现象示意。',
+    wiring:[['VCC','5V'],['GND','GND'],['TRIG','GPIO26'],['ECHO','GPIO27（实物需分压）']],
+    wiringNote:'Wokwi 可直接接 ECHO，距离范围2–400 cm。实物 ECHO 用分压接 ESP32：ECHO→1kΩ→GPIO27→2kΩ→GND。',
+    sourceNote:'距离 = 回波时间 × 0.034 / 2，取整数；增加30 ms无回波超时，避免等待卡住。网页采用理想340m/s模型。',
+    url:'https://wcn5nr4htkrb.feishu.cn/wiki/GmPlwxo1wij48KkD7TccVQhhnNb',
+    interval:500,
+    controls:[['distance','目标距离',2,450,1,'cm']],
+    presets:[['非常近',{distance:3,echo:true}],['近距离',{distance:10,echo:true}],['中距离',{distance:50,echo:true}],['远距离',{distance:200,echo:true}],['超出范围',{distance:450,echo:true}]]}
+};
+specs.combined = {
+  name:'综合采集',title:'ESP32 多传感器综合采集',description:'同时读取 MPU6050、FSR402、HX711 和 HC-SR04。',
+  note:'先空载开始，再改变压力、负载、距离或运动输入。四种数据在同一轮串口输出。',
+  wiring:[['MPU6050 VCC / GND','3V3 / GND'],['MPU6050 SDA / SCL','GPIO21 / GPIO22'],['电位器 VCC / GND / SIG','3V3 / GND / GPIO34'],['HX711 VCC / GND / DT / SCK','5V / GND / GPIO32 / GPIO33'],['HC-SR04 VCC / GND / TRIG / ECHO','5V / GND / GPIO26 / GPIO27']],
+  wiringNote:'所有传感器共地。实物超声波 ECHO 需分压，HX711 数字逻辑需与 ESP32 的3.3V兼容。',
+  sourceNote:'参考后两份文档的采集函数；依赖 MPU6050 和 HX711。综合距离提示按10、50、200 cm分档。',
+  references:[['多传感器采集','https://wcn5nr4htkrb.feishu.cn/wiki/OW9fwyuZliZkxBkVasNcvsFhneG'],['系统中的采集函数','https://wcn5nr4htkrb.feishu.cn/wiki/Ps12whZ9iiQ6OikyvRAckM5inXb']],
+  interval:500,
+  controls:[...specs.mpu6050.controls,...specs.fsr402.controls,...specs.hx711.controls,...specs.hcsr04.controls],
+  presets:[['静止 / 空载',{...defaults.combined}],['按压 + 放上1 kg',{adc:650,load:1}],['目标靠近',{distance:5,echo:true}]]
+};
+let active = 'mpu6050', state = {...defaults[active]}, timer = null, last = null, lines = [], initialized = false, tareRaw = 0, elapsedMs = 0;
+
+function stop() {
+  if (timer !== null) clearInterval(timer);
+  timer = null;
+  $('run').textContent = '开始实验';
+  $('status').textContent = last ? '已停止' : '未开始';
 }
-function refreshReadings() {
-  $('readings').innerHTML = servoDefs.map(s => { const r = servoReading(s.id); return `<div class="reading" style="--color:${s.color}"><div class="reading-header"><i></i>${s.name} · GPIO${s.pin}</div><strong>${r.active ? r.angle.toFixed(1) + '°' : '—'}</strong><small>${r.active ? Math.round(r.pulse) + ' µs / ' + r.hz.toFixed(1) + ' Hz' : esc(r.reason)}</small></div>`; }).join('');
-  const warnings = [];
-  for (const w of wires) { const pads = getPads(connected(w.a)); if (pads.includes('GND') && (pads.includes('5V') || pads.includes('3V3'))) { warnings.push('电源与地短接：请检查接线。'); break; } }
-  $('warning').textContent = warnings.join(' ');
+function showSource() {
+  const file = $('file-select').value;
+  $('source').textContent = projects[active][file] || '无需额外依赖库。';
 }
-function wiringList() {
-  $('wire-count').textContent = ` · ${wires.length} 条`;
-  $('wires-list').innerHTML = wires.map((w, i) => `<div class="wire-row"><span>${esc(w.a)} — ${esc(w.b)}</span><button data-remove="${i}">删除</button></div>`).join('');
+function buildControls() {
+  const spec = specs[active];
+  $('controls').replaceChildren();
+  for (const [key,label,min,max,step,unit] of spec.controls) {
+    const wrapper = document.createElement('label');
+    wrapper.className = 'control' + (spec.controls.length === 1 ? ' full' : '');
+    wrapper.innerHTML = `<span class="control-heading"><span>${label}<\/span><output id="value-${key}"><\/output><\/span><input type="range" id="input-${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}"><span class="ends"><span>${min} ${unit}<\/span><span>${max} ${unit}<\/span><\/span>`;
+    wrapper.querySelector('input').addEventListener('input', event => {
+      state[key] = Number(event.target.value); updateInputs();
+    });
+    $('controls').append(wrapper);
+  }
+  if (active === 'hcsr04' || active === 'combined') {
+    const wrapper = document.createElement('label');
+    wrapper.className = 'check full';
+    wrapper.innerHTML = '<input id="no-echo" type="checkbox">无回波';
+    wrapper.querySelector('input').addEventListener('change', event => {state.echo = !event.target.checked; updateInputs();});
+    $('controls').append(wrapper);
+  }
+  $('presets').replaceChildren();
+  for (const [label,values] of spec.presets) {
+    const button = document.createElement('button');
+    button.textContent = label;
+    button.addEventListener('click', () => {Object.assign(state,values); updateInputs();});
+    $('presets').append(button);
+  }
+  updateInputs();
 }
-function render() { renderWires(); renderParts(); refreshReadings(); wiringList(); }
-function pinClick(id) {
-  if (!pendingPin) pendingPin = id;
-  else { if (pendingPin !== id && !wires.some(w => (w.a === pendingPin && w.b === id) || (w.b === pendingPin && w.a === id))) wires.push({ a: pendingPin, b: id, color: '#649c7a' }); pendingPin = null; }
-  $('hint').textContent = pendingPin ? '选择另一个引脚完成接线 · Esc 取消' : '点击两个引脚接线 · 拖动元件移动'; render();
+function updateInputs() {
+  for (const [key,, , ,step,unit] of specs[active].controls) {
+    $('input-' + key).value = state[key];
+    $('value-' + key).textContent = state[key].toFixed(step < 1 ? 2 : 0) + ' ' + unit;
+  }
+  if (active === 'hcsr04' || active === 'combined') {$('no-echo').checked = !state.echo; $('input-distance').disabled = !state.echo;}
+  drawVisual();
 }
-svg.addEventListener('click', e => { const pin = e.target.closest('[data-pin]'); if (pin) pinClick(pin.dataset.pin); });
-svg.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { const pin = e.target.closest('[data-pin]'); if (pin) { e.preventDefault(); pinClick(pin.dataset.pin); } } });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { pendingPin = null; $('hint').textContent = '点击两个引脚接线 · 拖动元件移动'; render(); } });
-$('wires-list').addEventListener('click', e => { const button = e.target.closest('[data-remove]'); if (button) { wires.splice(+button.dataset.remove, 1); render(); } });
-let drag;
-function point(e) { return new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM().inverse()); }
-svg.addEventListener('pointerdown', e => { if (e.target.closest('[data-pin]')) return; const t = e.target.closest('[data-part]'); if (!t) return; const p = point(e); drag = { id: t.dataset.part, dx: p.x - parts[t.dataset.part].x, dy: p.y - parts[t.dataset.part].y }; svg.setPointerCapture(e.pointerId); });
-svg.addEventListener('pointermove', e => { if (!drag) return; const p = point(e); const part = parts[drag.id]; part.x = Math.max(65, Math.min(755, p.x - drag.dx)); part.y = Math.max(30, Math.min(drag.id === 'board' ? 170 : 450, p.y - drag.dy)); renderWires(); renderParts(); });
-svg.addEventListener('pointerup', () => { drag = null; }); svg.addEventListener('pointercancel', () => { drag = null; });
-function view(z) { zoom = Math.max(.65, Math.min(1.5, z)); const w = 900 / zoom, h = 600 / zoom; svg.setAttribute('viewBox', `${(900-w)/2} ${(600-h)/2} ${w} ${h}`); }
-$('plus').onclick = () => view(zoom + .1); $('minus').onclick = () => view(zoom - .1); $('fit').onclick = () => view(1);
-function log(text) { const clean = text.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, ''); $('console').textContent = ($('console').textContent + clean).slice(-60000); $('console').scrollTop = $('console').scrollHeight; serialTail = (serialTail + clean).slice(-1024); const times = [...serialTail.matchAll(/(?:TIME |时间:\s*)(\d{2}:\d{2}:\d{2})/g)]; if (times.length) $('clock-time').textContent = times.at(-1)[1]; }
-function controls() { $('run').disabled = busy || running; $('pause').disabled = !running; $('reset').disabled = busy; $('load').disabled = busy; }
-function stopWithError(message) { busy = false; running = false; $('status').textContent = '运行失败'; log('\n[错误] ' + message + '\n'); controls(); }
-function createWorker() {
-  worker?.terminate(); const url = URL.createObjectURL(new Blob([$ ('worker-code').textContent], { type: 'text/javascript' }));
-  worker = new Worker(url, { type: 'module' }); URL.revokeObjectURL(url);
-  worker.onerror = e => stopWithError(e.message);
-  worker.onmessage = ({ data: m }) => {
-    if (m.type === 'loaded') { loaded = true; busy = false; $('cpu').textContent = `Xtensa LX7 · ${m.cores} 核 · ${m.cpuMHz} MHz`; $('status').textContent = '固件已加载'; if (startRequested) { startRequested = false; start(); } controls(); }
-    else if (m.type === 'uart') log(m.text);
-    else if (m.type === 'error') stopWithError(m.message);
-    else if (m.type === 'snapshot') {
-      signals = m.servos; renderParts(); refreshReadings(); $('elapsed').textContent = (m.cycles / m.cpuMHz / 1000000).toFixed(3) + ' s';
-      $('ntp-status').textContent = `NTP ${m.ntp} 次 · DNS ${m.dns} 次`;
-      $('cpu').textContent = `Xtensa LX7 · PC ${m.pcs.map(p => '0x' + p.toString(16)).join(' / ')}`;
-    }
+function drawVisual() {
+  const diagram = JSON.parse(projects[active].diagram);
+  const parts = diagram.parts.filter(part => part.id !== 'esp');
+  const pinY = new Map(), endpoints = new Map();
+  const links = diagram.connections.filter(wire => !wire[1].startsWith('$'));
+  const boardPins = [...new Set(links.map(wire => wire[1].split(':')[1]))];
+  let drawing = '<rect x="145" y="80" width="190" height="390" rx="8" fill="#27312b" stroke="#1c281e" stroke-width="3"/><rect x="155" y="93" width="115" height="90" rx="3" fill="#bdc5b7" stroke="#81907c"/><path d="M164 100h85v9h-75v10h75v9h-75v10h75" fill="none" stroke="#73816e" stroke-width="3"/><text x="162" y="165" fill="#52634e" font-size="11">ESP-WROOM-32<\/text><rect x="174" y="216" width="60" height="63" rx="3" fill="#101a13" stroke="#697565"/><text x="203" y="253" fill="#c7d6bc" text-anchor="middle" font-size="12">ESP32<\/text><rect x="207" y="427" width="42" height="43" rx="4" fill="#b2bca9" stroke="#798570"/><rect x="215" y="442" width="26" height="16" fill="#4d5a48"/><text x="205" y="496" fill="#70876c" text-anchor="middle" font-size="13">ESP32 DevKitC<\/text>';
+  for (let i=0;i<12;i++) drawing += `<rect x="134" y="${99+i*27}" width="13" height="8" class="visual-pin"/>`;
+  boardPins.forEach((pin,i) => {
+    const y = 128 + i*28; pinY.set(pin,y);
+    drawing += `<text x="317" y="${y+4}" fill="#cbd6c0" text-anchor="end" font-size="11">${/^\d+$/.test(pin) ? 'GPIO'+pin : pin.replace('GND.2','GND')}<\/text><rect x="330" y="${y-4}" width="14" height="8" class="visual-pin"/>`;
+  });
+  const styles = {
+    'wokwi-mpu6050':['MPU6050',['VCC','GND','SCL','SDA'],'#5e886c'],
+    'wokwi-potentiometer':['电位器 · FSR402 输入',['VCC','GND','SIG'],'#667852'],
+    'wokwi-hx711':['HX711',['VCC','GND','DT','SCK'],'#6d8b67'],
+    'wokwi-hc-sr04':['HC-SR04',['VCC','GND','TRIG','ECHO'],'#51888e']
   };
+  parts.forEach((part,index) => {
+    const y = parts.length === 1 ? 214 : 50+index*120;
+    const [name,pins,color] = styles[part.type];
+    drawing += `<text x="662" y="${y-10}" fill="#6f866d" text-anchor="middle" font-size="13">${name}<\/text><rect x="552" y="${y}" width="220" height="95" rx="5" fill="${color}" stroke="#4d6650"/>`;
+    pins.forEach((pin,i) => {
+      const py = y+16+i*19; endpoints.set(part.id+':'+pin,{x:547,y:py,index,pinIndex:i});
+      drawing += `<rect x="546" y="${py-3}" width="10" height="6" class="visual-pin"/><text x="563" y="${py+4}" fill="#e0ead6" font-size="10">${pin}<\/text>`;
+    });
+    if (part.type === 'wokwi-mpu6050') {
+      const angle = Math.atan2(state.ax,state.az)*180/Math.PI;
+      drawing += `<rect x="674" y="${y+24}" width="41" height="36" fill="#202e24"/><path d="M737 ${y+40}v-22m0 22h22" stroke="#d5e6c5" stroke-width="2"/><g transform="translate(694 ${y+42}) rotate(${angle})"><path d="M0 -13v26m-5-20 5-6 5 6" stroke="#a4e8bb" fill="none" stroke-width="2"/><\/g><text x="659" y="${y+83}" fill="#e3ecdb" font-size="10">Z ${state.az.toFixed(2)} g · ${state.gz} °/s<\/text>`;
+    } else if (part.type === 'wokwi-potentiometer') {
+      drawing += `<circle cx="700" cy="${y+43}" r="27" fill="#bbc6ac" stroke="#3c4935" stroke-width="4"/><g transform="translate(700 ${y+43}) rotate(${state.adc/4095*270-135})"><path d="M0 0v-20" stroke="#3d5136" stroke-width="4"/><\/g><text x="660" y="${y+83}" fill="#e3ecdb" font-size="11">ADC ${state.adc}<\/text>`;
+    } else if (part.type === 'wokwi-hx711') {
+      drawing += `<rect x="653" y="${y+50}" width="100" height="13" rx="3" fill="#ccd7c1"/><path d="M669 ${y+45}h70" stroke="#e5ecdf" stroke-width="4"/>${state.load>0 ? `<rect x="686" y="${y+15}" width="37" height="28" rx="4" fill="#a4e8bb"/>` : ''}<text x="659" y="${y+83}" fill="#e3ecdb" font-size="11">负载 ${state.load.toFixed(2)} kg<\/text>`;
+    } else {
+      drawing += `<circle cx="684" cy="${y+43}" r="23" fill="#c8d0c3" stroke="#354e4f" stroke-width="3"/><circle cx="741" cy="${y+43}" r="23" fill="#c8d0c3" stroke="#354e4f" stroke-width="3"/><circle cx="684" cy="${y+43}" r="16" fill="#8b9b91"/><circle cx="741" cy="${y+43}" r="16" fill="#8b9b91"/><text x="659" y="${y+83}" fill="#e3ecdb" font-size="11">${state.echo ? '目标 '+state.distance+' cm' : '无回波'}<\/text>`;
+    }
+  });
+  let wires = '';
+  for (const [from,to,color] of links) {
+    const endpoint = endpoints.get(from), sourceY = pinY.get(to.split(':')[1]);
+    if (!endpoint || sourceY === undefined) continue;
+    const bend = 387+endpoint.index*24+endpoint.pinIndex*8;
+    const stroke = color === 'red' ? '#bd6f69' : color === 'black' ? '#77857d' : '#65a377';
+    wires += `<path class="connection" d="M344 ${sourceY}H${bend}V${endpoint.y}H${endpoint.x}" stroke="${stroke}"/>`;
+  }
+  $('visual').innerHTML = `<svg viewBox="0 0 900 550" aria-hidden="true">${wires}${drawing}<\/svg>`;
+  $('visual').setAttribute('aria-label',`ESP32 与 ${specs[active].name} 的固定接线示意`);
 }
-async function loadFirmware(autoStart = true) {
-  if (busy) return; busy = true; running = false; loaded = false; startRequested = autoStart; signals = []; controls(); $('status').textContent = '加载内核与固件…';
-  try {
-    if (!firmware) { const base = './firmware/clock-' + $('source-code').dataset.revision; const response = await fetch(base + '.bin'); if (!response.ok) throw new Error('当前源码对应的内置固件尚未构建，请检查 GitHub Actions。'); firmware = await response.arrayBuffer(); const elfResponse = await fetch(base + '.elf'); if (elfResponse.ok) appElf = await elfResponse.arrayBuffer(); }
-    if (firmware.byteLength < 65536 || firmware.byteLength > 32 * 1024 * 1024) throw new Error('请选择包含 bootloader、分区表和应用的合并 .bin（64 KB–32 MB）。');
-    createWorker(); worker.postMessage({ type: 'network', enabled: $('network').checked });
-    const copy = firmware.slice(0); worker.postMessage({ type: 'load', firmware: copy, elf: appElf, engineUrl: new URL('./vendor/esp-emu/pkg/esp_emu.js', location.href).href }, [copy]);
-  } catch (e) { stopWithError(e.message); }
+function cardsFor(id, result) {
+  let cards;
+  if (id === 'mpu6050') {
+    cards = ['X','Y','Z'].map((axis,i) => [axis+' 轴加速度',result ? result.values[i].toFixed(2) : '--','g']);
+    cards.push(...['X','Y','Z'].map((axis,i) => [axis+' 轴角速度',result ? result.values[i+3].toFixed(2) : '--','°/s']));
+  } else if (id === 'fsr402') {
+    cards = [['ADC 原始值',result ? result.adc : '--','0–4095'],['分压电压',result ? result.voltage.toFixed(2) : '--','V · 按ADC换算'],['压力等级',result ? result.pressure : '--','教程示意阈值']];
+  } else if (id === 'hx711') {
+    cards = [['相对重量',result ? result.weight.toFixed(2) : '--','kg · 去皮后'],['HX711 原始值',result ? result.raw : '--','Wokwi 5 kg 模型']];
+  } else {
+    cards = [['测得距离',result ? (result.distance === null ? '无回波' : result.distance) : '--','cm'],['回波时间',result ? result.pulse : '--','µs'],['距离提示',result ? result.label : '--','按教程分档']];
+  }
+  return cards;
 }
-function start() { if (!loaded) { loadFirmware(); return; } running = true; $('status').textContent = '运行中'; worker.postMessage({ type: 'start' }); controls(); }
-$('run').onclick = start;
-$('pause').onclick = () => { running = false; worker?.postMessage({ type: 'pause' }); $('status').textContent = '已暂停'; controls(); };
-$('reset').onclick = () => { worker?.terminate(); worker = null; busy = false; running = false; loaded = false; signals = []; serialTail = ''; $('clock-time').textContent = '--:--:--'; log('\n[重新启动]\n'); loadFirmware(); };
-$('load').onclick = () => $('file').click();
-$('file').onchange = async () => { const file = $('file').files[0]; if (!file) return; if (file.size > 32*1024*1024) { log('\n固件超过 32 MB。\n'); return; } firmware = await file.arrayBuffer(); appElf = null; $('firmware-name').textContent = file.name; await loadFirmware(); $('file').value = ''; };
-$('network').onchange = () => worker?.postMessage({ type: 'network', enabled: $('network').checked });
-$('clear').onclick = () => { $('console').textContent = ''; };
-$('serial-form').onsubmit = e => { e.preventDefault(); if (worker && loaded) worker.postMessage({ type: 'uart', text: $('serial-text').value + '\n' }); $('serial-text').value = ''; };
-$('code').oninput = () => { sourceDirty = $('code').value !== source; $('source-state').textContent = sourceDirty ? '已修改 · 需要重新编译' : '已编译示例'; };
-$('restore-code').onclick = () => { $('code').value = source; sourceDirty = false; $('source-state').textContent = '已编译示例'; };
-$('download-code').onclick = () => { const url = URL.createObjectURL(new Blob([$ ('code').value], { type: 'text/plain;charset=utf-8' })); const a = document.createElement('a'); a.href = url; a.download = 'clock.ino'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); };
-$('help').onclick = () => $('help-dialog').showModal(); $('close-help').onclick = () => $('help-dialog').close();
-window.addEventListener('beforeunload', () => worker?.terminate());
-render();
-</script>
-</body></html>
+function showReadings() {
+  const cards = active === 'combined'
+    ? [
+      ['MPU6050 · 加速度 XYZ',last ? last.mpu.values.slice(0,3).map(v=>v.toFixed(2)).join(' / ') : '--',last ? 'g · 角速度 '+last.mpu.values.slice(3).map(v=>v.toFixed(2)).join(' / ')+' °/s' : 'g / °/s'],
+      ['FSR402 · 压力',last ? last.fsr.pressure : '--',last ? `ADC ${last.fsr.adc} · ${last.fsr.voltage.toFixed(2)} V` : 'ADC / 电压'],
+      ['HX711 · 相对重量',last ? last.hx.weight.toFixed(2) : '--','kg · 去皮后'],
+      ['HC-SR04 · 距离',last ? (last.hc.distance === null ? '无回波' : last.hc.distance) : '--',last ? 'cm · '+last.hc.label : 'cm']
+    ]
+    : cardsFor(active,last);
+  $('readings').innerHTML = cards.map(([label,value,unit],i) => `<div class="reading" style="--color:${['#d09756','#54866b','#70a8b8','#aa79a2'][i%4]}"><div class="reading-header"><i><\/i>${label}<\/div><strong class="${isNaN(Number(value)) ? 'text-value' : ''}">${value}<\/strong><small>${unit}<\/small><\/div>`).join('');
+}
+function log(newLines) {
+  lines.push(...newLines);
+  lines = lines.slice(-120);
+  $('console').textContent = lines.join('\n');
+  $('console').scrollTop = $('console').scrollHeight;
+}
+function sample() {
+  last = measure(active,state,{tareRaw}); showReadings(); log(last.lines);
+  $('elapsed').textContent = `${String(Math.floor(elapsedMs/60000)).padStart(2,'0')}:${String(Math.floor(elapsedMs/1000)%60).padStart(2,'0')}.${String(elapsedMs%1000).padStart(3,'0')}`;
+}
+function selectExperiment(id) {
+  stop(); active = id; state = {...defaults[id]}; last = null; lines = [];
+  initialized = false; tareRaw = 0; elapsedMs = 0; $('elapsed').textContent = '00:00.000';
+  const spec = specs[id];
+  for (const button of document.querySelectorAll('[data-experiment]')) button.setAttribute('aria-pressed',String(button.dataset.experiment === id));
+  $('title').textContent = spec.title; $('description').textContent = spec.description;
+  $('input-note').textContent = spec.note; $('wiring-note').textContent = spec.wiringNote;
+  $('wiring').innerHTML = spec.wiring.map(([pin,target]) => `<tr><td>${pin}<\/td><td>${target}<\/td><\/tr>`).join('');
+  $('source-note').replaceChildren(document.createTextNode(spec.sourceNote + ' '));
+  for (const [label,url] of spec.references || [['参考资料',spec.url]]) {
+    const link = document.createElement('a'); link.href = url; link.textContent = label; link.target = '_blank'; link.rel = 'noopener'; $('source-note').append(link,document.createTextNode(' '));
+  }
+  $('sampling-note').textContent = `每 ${spec.interval} ms 读取一次`;
+  $('file-select').value = 'code'; showSource(); buildControls(); showReadings();
+  $('status').textContent = '未开始'; $('console').textContent = '点击「开始实验」读取数据。';
+}
+document.querySelectorAll('[data-experiment]').forEach(button => button.addEventListener('click', () => selectExperiment(button.dataset.experiment)));
+$('run').addEventListener('click', () => {
+  if (timer !== null) {stop(); return;}
+  $('status').textContent = '读取中'; $('run').textContent = '停止实验';
+  if (!initialized) {
+    if (active === 'hx711' || active === 'combined') {
+      tareRaw = Math.round(state.load * 420);
+      log(['HX711 去皮完成']);
+    }
+    log(active === 'mpu6050' ? ['初始化MPU6050...','MPU6050 连接成功','MPU6050 初始化成功']
+      : active === 'fsr402' ? ['FSR402压力传感器测试开始']
+      : active === 'hcsr04' ? ['HC-SR04超声波传感器测试'] : [specs[active].name + ' 初始化成功']);
+    initialized = true;
+  }
+  sample(); timer = setInterval(() => {elapsedMs += specs[active].interval; sample();},specs[active].interval);
+});
+$('reset').addEventListener('click', () => selectExperiment(active));
+$('clear').addEventListener('click', () => {lines = []; $('console').textContent = '';});
+$('file-select').addEventListener('change',showSource);
+$('download').addEventListener('click', () => {
+  const file = $('file-select').value;
+  const names = {code:'sketch.ino',diagram:'diagram.json',libraries:'libraries.txt'};
+  const url = URL.createObjectURL(new Blob([projects[active][file]],{type:'text/plain;charset=utf-8'}));
+  const link = document.createElement('a'); link.href = url; link.download = names[file]; link.click();
+  setTimeout(() => URL.revokeObjectURL(url),1000);
+});
+selectExperiment(active);
+</script></body></html>
